@@ -1,8 +1,11 @@
-*.pyc
+# Python
+venv/
 __pycache__/
-db.sqlite3
-.env
+*.pyc
 
-node_modules/
-.next/
-.env.local
+# Django
+db.sqlite3
+staticfiles/
+
+# Env
+.env

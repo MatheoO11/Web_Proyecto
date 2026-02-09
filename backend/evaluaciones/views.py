@@ -4,26 +4,30 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.conf import settings
 from django.db.models import Avg, Count
+import traceback
+import json
 
 from .models import ResultadoD2R, SesionAtencion, DetalleAtencion
 from .serializers import ResultadoD2RSerializer, SesionAtencionSerializer
 
-# Importar Google Gemini con manejo de errores
-try:
-    import google.generativeai as genai
-    GEMINI_DISPONIBLE = True
-except ImportError:
-    GEMINI_DISPONIBLE = False
-    print("⚠️ WARNING: google.generativeai no está instalado")
 
-# Configuración de Gemini
+# ======================================================
+# GOOGLE GEMINI (API OFICIAL)
+# ======================================================
 try:
+    from google import genai
     api_key = getattr(settings, "GOOGLE_API_KEY", None)
-    if api_key and GEMINI_DISPONIBLE:
-        genai.configure(api_key=api_key)
-        print("✅ Gemini configurado correctamente")
-except Exception as e:
-    print(f"⚠️ ADVERTENCIA: Error configurando Gemini: {e}")
+    client = genai.Client(api_key=api_key) if api_key else None
+    GEMINI_DISPONIBLE = bool(client)
+except Exception:
+    GEMINI_DISPONIBLE = False
+    client = None
+    print("⚠️ WARNING: google-genai no está disponible")
+
+
+# ======================================================
+# RESULTADO D2R
+# ======================================================
 
 class ResultadoD2RViewSet(viewsets.ModelViewSet):
     queryset = ResultadoD2R.objects.all()
@@ -32,25 +36,20 @@ class ResultadoD2RViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        # Admin y Docentes ven todo, estudiantes solo lo suyo
-        if getattr(user, 'rol', '') in ['admin', 'docente'] or user.is_staff:
+        if getattr(user, "rol", "") in ["admin", "docente"] or user.is_staff:
             return ResultadoD2R.objects.all()
         return ResultadoD2R.objects.filter(estudiante=user)
 
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=["post"])
     def recomendacion(self, request, pk=None):
         if not GEMINI_DISPONIBLE:
-            return Response({
-                "error": "Gemini AI no está disponible"
-            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-
-        api_key = getattr(settings, "GOOGLE_API_KEY", None)
-        if not api_key or api_key == "":
-            return Response({
-                "error": "GOOGLE_API_KEY no configurada."
-            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            return Response(
+                {"error": "Gemini AI no está disponible"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
 
         resultado = self.get_object()
+
         datos_analisis = {
             "tr_total": resultado.tr_total,
             "ta_total": resultado.ta_total,
@@ -61,24 +60,40 @@ class ResultadoD2RViewSet(viewsets.ModelViewSet):
         }
 
         prompt = f"""
-        Eres un tutor experto. Analiza el test D2-R del estudiante:
-        DATOS: {datos_analisis}
+Eres un tutor experto.
+Analiza el test D2-R del estudiante:
 
-        Devuelve:
-        - diagnostico (1 frase)
-        - 3 recomendaciones accionables
+DATOS:
+{datos_analisis}
 
-        Responde en JSON con claves: diagnostico, recomendaciones (lista).
-        """.strip()
+Devuelve JSON válido:
+{{
+  "diagnostico": "1 frase",
+  "recomendaciones": ["rec1", "rec2", "rec3"]
+}}
+""".strip()
 
         try:
-            # ✅ CORREGIDO: Usar gemini-pro en lugar de gemini-1.5-flash
-            model = genai.GenerativeModel('gemini-pro')
-            r = model.generate_content(prompt)
-            return Response({"ok": True, "raw": r.text, "input": datos_analisis})
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt
+            )
+            return Response({
+                "ok": True,
+                "raw": response.text,
+                "input": datos_analisis
+            })
         except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            traceback.print_exc()
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
 
+
+# ======================================================
+# SESIÓN DE ATENCIÓN
+# ======================================================
 
 class SesionAtencionViewSet(viewsets.ModelViewSet):
     queryset = SesionAtencion.objects.all()
@@ -87,93 +102,88 @@ class SesionAtencionViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        if getattr(user, 'rol', '') in ['admin', 'docente'] or user.is_staff:
+        if getattr(user, "rol", "") in ["admin", "docente"] or user.is_staff:
             return SesionAtencion.objects.all()
         return SesionAtencion.objects.filter(estudiante=user)
 
-    @action(detail=False, methods=['post'])
+    @action(detail=False, methods=["post"])
     def ia(self, request):
-        """Endpoint genérico para análisis simple de métricas"""
         if not GEMINI_DISPONIBLE:
-            return Response({
-                "error": "Gemini AI no está disponible"
-            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-
-        api_key = getattr(settings, "GOOGLE_API_KEY", None)
-        if not api_key or api_key == "":
-            return Response({
-                "error": "GOOGLE_API_KEY no configurada."
-            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            return Response(
+                {"error": "Gemini AI no está disponible"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
 
         metrics = request.data.get("metrics", {}) or {}
         context = request.data.get("context", {}) or {}
 
         prompt = f"""
-        Eres un analista de atención. Con base en estas métricas:
-        - yaw: {metrics.get("yaw")}
-        - pitch: {metrics.get("pitch")}
-        - gaze: {metrics.get("gaze")}
-        - ear: {metrics.get("ear")}
+Eres un analista de atención.
 
-        Contexto:
-        - recurso: {context.get("recurso")}
-        - duracion: {context.get("duracion")}
-        - porcentaje_atencion: {context.get("porcentaje_atencion")}
+MÉTRICAS:
+- yaw: {metrics.get("yaw")}
+- pitch: {metrics.get("pitch")}
+- gaze: {metrics.get("gaze")}
+- ear: {metrics.get("ear")}
 
-        Devuelve JSON:
-        diagnostico (string),
-        recomendaciones (lista de strings).
-        """.strip()
+CONTEXTO:
+- recurso: {context.get("recurso")}
+- duracion: {context.get("duracion")}
+- porcentaje_atencion: {context.get("porcentaje_atencion")}
+
+Devuelve JSON:
+{{
+  "diagnostico": "texto",
+  "recomendaciones": ["r1","r2","r3"]
+}}
+""".strip()
 
         try:
-            # ✅ CORREGIDO: Usar gemini-pro en lugar de gemini-1.5-flash
-            model = genai.GenerativeModel('gemini-pro')
-            r = model.generate_content(prompt)
-            return Response({"ok": True, "raw": r.text})
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt
+            )
+            return Response({"ok": True, "raw": response.text})
         except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            traceback.print_exc()
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
 
-    @action(detail=False, methods=['post'])
+    @action(detail=False, methods=["post"])
     def recomendacion_global(self, request):
-        """
-        POST /api/evaluaciones/atencion/recomendacion_global/
-        """
         if not GEMINI_DISPONIBLE:
-            return Response({
-                "error": "Gemini AI no está disponible"
-            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-
-        api_key = getattr(settings, "GOOGLE_API_KEY", None)
-        if not api_key or api_key == "":
-            return Response({
-                "error": "GOOGLE_API_KEY no configurada."
-            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            return Response(
+                {"error": "Gemini AI no está disponible"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
 
         user = request.user
         recurso_id = request.data.get("recurso_id")
 
         if not recurso_id:
-            return Response({"error": "recurso_id es requerido"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "recurso_id es requerido"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-        # 1) Última sesión de atención
         sesion = SesionAtencion.objects.filter(
             estudiante=user,
             recurso_id=recurso_id
         ).order_by("-fecha").first()
 
         if not sesion:
-            return Response({
-                "error": "No hay sesión de atención registrada para este recurso"
-            }, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "No hay sesión de atención registrada"},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
-        # 2) Último test D2R
         d2r = ResultadoD2R.objects.filter(estudiante=user).order_by("-fecha").first()
 
-        # 3) % distraído
         qs_det = DetalleAtencion.objects.filter(sesion=sesion)
         total_det = qs_det.count()
         distraido_det = qs_det.filter(es_distraido=True).count()
-
         pct_det_distraido = round((distraido_det / total_det) * 100, 2) if total_det else 0
 
         datos = {
@@ -200,25 +210,37 @@ class SesionAtencionViewSet(viewsets.ModelViewSet):
             }
 
         prompt = f"""
-        Eres un tutor experto en aprendizaje y atención.
-        Genera recomendaciones personalizadas para el estudiante con estos DATOS:
-        {datos}
+Eres un tutor experto en aprendizaje y atención.
 
-        INSTRUCCIONES:
-        - Entrega 1 diagnostico corto.
-        - Entrega 5 recomendaciones accionables (bullet points).
-        - Incluye 1 recomendación específica si pct_det_distraido es alto (>20%).
-        - Si no hay D2R, basa tu análisis solo en la atención visual.
+DATOS:
+{datos}
 
-        Responde estrictamente en JSON válido con estas claves:
-        diagnostico (string),
-        recomendaciones (lista de strings).
-        """.strip()
+INSTRUCCIONES:
+- 1 diagnóstico corto
+- 5 recomendaciones accionables
+- Si pct_det_distraido > 20%, incluir recomendación específica
+- Si no hay D2R, usar solo atención visual
+
+Devuelve JSON:
+{{
+  "diagnostico": "texto",
+  "recomendaciones": ["r1","r2","r3","r4","r5"]
+}}
+""".strip()
 
         try:
-            # ✅ CORREGIDO: Usar gemini-pro en lugar de gemini-1.5-flash
-            model = genai.GenerativeModel('gemini-pro')
-            r = model.generate_content(prompt)
-            return Response({"ok": True, "data": r.text, "input": datos})
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt
+            )
+            return Response({
+                "ok": True,
+                "data": response.text,
+                "input": datos
+            })
         except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            traceback.print_exc()
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
