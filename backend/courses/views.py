@@ -12,7 +12,12 @@ from .models import Curso, Modulo, Recurso
 from .serializers import CursoSerializer, ModuloSerializer, RecursoSerializer
 
 # Importamos Google Gemini
-import google.generativeai as genai
+try:
+    import google.generativeai as genai
+    GEMINI_DISPONIBLE = True
+except ImportError:
+    GEMINI_DISPONIBLE = False
+    print("⚠️ WARNING: google.generativeai no está instalado")
 
 class CursoViewSet(viewsets.ModelViewSet):
     serializer_class = CursoSerializer
@@ -196,15 +201,21 @@ def generar_recomendaciones_ia(user, d2r_data, sesiones, estadisticas, patron):
     Usa Google Gemini AI para generar recomendaciones personalizadas
     """
 
+    # Verificar si Gemini está disponible
+    if not GEMINI_DISPONIBLE:
+        print("⚠️ Gemini no disponible, usando fallback")
+        return generar_recomendaciones_fallback(sesiones, patron)
+
     # Configurar Gemini
     api_key = settings.GOOGLE_API_KEY
-    if not api_key:
+    if not api_key or api_key == "":
+        print("⚠️ API Key vacía, usando fallback")
         return generar_recomendaciones_fallback(sesiones, patron)
 
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
-
+        # ✅ CORREGIDO: Usar gemini-pro en lugar de gemini-1.5-flash
+        model = genai.GenerativeModel('gemini-pro')
 
         # Preparar datos para el prompt
         videos_problema = [
@@ -230,7 +241,7 @@ Sesiones de Video (Atención en Tiempo Real):
 - Sesiones con baja atención (<70%): {estadisticas['sesiones_bajas']} de {estadisticas['total_sesiones']}
 
 Videos con BAJA atención:
-{json.dumps([{{'titulo': v['recurso_titulo'], 'atencion': v['porcentaje_atencion'], 'modulo': v['modulo']}} for v in videos_problema], indent=2, ensure_ascii=False)}
+{json.dumps([{'titulo': v['recurso_titulo'], 'atencion': v['porcentaje_atencion'], 'modulo': v['modulo']} for v in videos_problema], indent=2, ensure_ascii=False)}
 
 🎯 PATRÓN DETECTADO:
 - Tipo: {patron['patron']}
@@ -271,18 +282,25 @@ Responde SOLO con el JSON, sin markdown, sin explicaciones adicionales:
 """
 
         # Llamar a Gemini
+        print("🤖 Llamando a Gemini AI...")
         response = model.generate_content(prompt)
         texto_respuesta = response.text.strip()
 
         # Limpiar posibles markdown
         if texto_respuesta.startswith('```json'):
             texto_respuesta = texto_respuesta.replace('```json', '').replace('```', '').strip()
+        elif texto_respuesta.startswith('```'):
+            texto_respuesta = texto_respuesta.replace('```', '').strip()
 
         # Parsear JSON
         resultado = json.loads(texto_respuesta)
+        print(f"✅ Gemini generó recomendaciones correctamente")
 
         return resultado
 
+    except json.JSONDecodeError as e:
+        print(f"❌ Error: Gemini no retornó JSON válido - {str(e)}")
+        return generar_recomendaciones_fallback(sesiones, patron)
     except Exception as e:
         print(f"❌ Error en Gemini AI: {str(e)}")
         return generar_recomendaciones_fallback(sesiones, patron)
@@ -291,6 +309,7 @@ def generar_recomendaciones_fallback(sesiones, patron):
     """
     Sistema de recomendaciones básico sin IA (fallback)
     """
+    print("⚙️ Usando sistema de recomendaciones fallback (sin IA)")
     recomendaciones = []
 
     # 1. Videos con baja atención

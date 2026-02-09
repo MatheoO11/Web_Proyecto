@@ -8,13 +8,20 @@ from django.db.models import Avg, Count
 from .models import ResultadoD2R, SesionAtencion, DetalleAtencion
 from .serializers import ResultadoD2RSerializer, SesionAtencionSerializer
 
-import google.generativeai as genai
+# Importar Google Gemini con manejo de errores
+try:
+    import google.generativeai as genai
+    GEMINI_DISPONIBLE = True
+except ImportError:
+    GEMINI_DISPONIBLE = False
+    print("⚠️ WARNING: google.generativeai no está instalado")
 
 # Configuración de Gemini
 try:
     api_key = getattr(settings, "GOOGLE_API_KEY", None)
-    if api_key:
+    if api_key and GEMINI_DISPONIBLE:
         genai.configure(api_key=api_key)
+        print("✅ Gemini configurado correctamente")
 except Exception as e:
     print(f"⚠️ ADVERTENCIA: Error configurando Gemini: {e}")
 
@@ -32,9 +39,16 @@ class ResultadoD2RViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def recomendacion(self, request, pk=None):
+        if not GEMINI_DISPONIBLE:
+            return Response({
+                "error": "Gemini AI no está disponible"
+            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
         api_key = getattr(settings, "GOOGLE_API_KEY", None)
-        if not api_key:
-            return Response({"error": "GOOGLE_API_KEY no configurada."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        if not api_key or api_key == "":
+            return Response({
+                "error": "GOOGLE_API_KEY no configurada."
+            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
         resultado = self.get_object()
         datos_analisis = {
@@ -58,7 +72,8 @@ class ResultadoD2RViewSet(viewsets.ModelViewSet):
         """.strip()
 
         try:
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            # ✅ CORREGIDO: Usar gemini-pro en lugar de gemini-1.5-flash
+            model = genai.GenerativeModel('gemini-pro')
             r = model.generate_content(prompt)
             return Response({"ok": True, "raw": r.text, "input": datos_analisis})
         except Exception as e:
@@ -79,9 +94,16 @@ class SesionAtencionViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'])
     def ia(self, request):
         """Endpoint genérico para análisis simple de métricas"""
+        if not GEMINI_DISPONIBLE:
+            return Response({
+                "error": "Gemini AI no está disponible"
+            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
         api_key = getattr(settings, "GOOGLE_API_KEY", None)
-        if not api_key:
-            return Response({"error": "GOOGLE_API_KEY no configurada."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        if not api_key or api_key == "":
+            return Response({
+                "error": "GOOGLE_API_KEY no configurada."
+            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
         metrics = request.data.get("metrics", {}) or {}
         context = request.data.get("context", {}) or {}
@@ -104,7 +126,8 @@ class SesionAtencionViewSet(viewsets.ModelViewSet):
         """.strip()
 
         try:
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            # ✅ CORREGIDO: Usar gemini-pro en lugar de gemini-1.5-flash
+            model = genai.GenerativeModel('gemini-pro')
             r = model.generate_content(prompt)
             return Response({"ok": True, "raw": r.text})
         except Exception as e:
@@ -115,9 +138,16 @@ class SesionAtencionViewSet(viewsets.ModelViewSet):
         """
         POST /api/evaluaciones/atencion/recomendacion_global/
         """
+        if not GEMINI_DISPONIBLE:
+            return Response({
+                "error": "Gemini AI no está disponible"
+            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
         api_key = getattr(settings, "GOOGLE_API_KEY", None)
-        if not api_key:
-            return Response({"error": "GOOGLE_API_KEY no configurada."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        if not api_key or api_key == "":
+            return Response({
+                "error": "GOOGLE_API_KEY no configurada."
+            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
         user = request.user
         recurso_id = request.data.get("recurso_id")
@@ -125,20 +155,23 @@ class SesionAtencionViewSet(viewsets.ModelViewSet):
         if not recurso_id:
             return Response({"error": "recurso_id es requerido"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 1) Última sesión de atención: Corregido order_by('fecha')
-        sesion = SesionAtencion.objects.filter(estudiante=user, recurso_id=recurso_id).order_by("-fecha").first()
+        # 1) Última sesión de atención
+        sesion = SesionAtencion.objects.filter(
+            estudiante=user,
+            recurso_id=recurso_id
+        ).order_by("-fecha").first()
 
         if not sesion:
-            return Response({"error": "No hay sesión de atención registrada para este recurso"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({
+                "error": "No hay sesión de atención registrada para este recurso"
+            }, status=status.HTTP_404_NOT_FOUND)
 
-        # 2) Último test D2R: Corregido order_by('fecha')
+        # 2) Último test D2R
         d2r = ResultadoD2R.objects.filter(estudiante=user).order_by("-fecha").first()
 
-        # 3) % distraído: Corregido campo 'es_distraido'
+        # 3) % distraído
         qs_det = DetalleAtencion.objects.filter(sesion=sesion)
         total_det = qs_det.count()
-
-        # ✅ AQUÍ ESTABA EL ERROR: Cambiado de es_distraccion a es_distraido
         distraido_det = qs_det.filter(es_distraido=True).count()
 
         pct_det_distraido = round((distraido_det / total_det) * 100, 2) if total_det else 0
@@ -183,7 +216,8 @@ class SesionAtencionViewSet(viewsets.ModelViewSet):
         """.strip()
 
         try:
-            model = genai.GenerativeModel("gemini-1.5-flash")
+            # ✅ CORREGIDO: Usar gemini-pro en lugar de gemini-1.5-flash
+            model = genai.GenerativeModel('gemini-pro')
             r = model.generate_content(prompt)
             return Response({"ok": True, "data": r.text, "input": datos})
         except Exception as e:
