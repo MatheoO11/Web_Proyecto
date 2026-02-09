@@ -15,9 +15,10 @@ export default function RecommendationsPanel() {
   const [activeSubTab, setActiveSubTab] = useState('resumen'); // resumen, evolucion, recursos
 
   useEffect(() => {
-    fetchRecomendaciones();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!token) return;      // espera al token
+    fetchRecomendaciones(); // ahora sí
   }, [token]);
+
 
   const fetchRecomendaciones = async () => {
     if (!token) return;
@@ -188,8 +189,8 @@ export default function RecommendationsPanel() {
           <button
             onClick={() => setActiveSubTab('resumen')}
             className={`pb-3 px-2 font-semibold border-b-2 transition ${activeSubTab === 'resumen'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
           >
             💡 Recomendaciones
@@ -197,8 +198,8 @@ export default function RecommendationsPanel() {
           <button
             onClick={() => setActiveSubTab('evolucion')}
             className={`pb-3 px-2 font-semibold border-b-2 transition ${activeSubTab === 'evolucion'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
           >
             📈 Evolución
@@ -206,8 +207,8 @@ export default function RecommendationsPanel() {
           <button
             onClick={() => setActiveSubTab('recursos')}
             className={`pb-3 px-2 font-semibold border-b-2 transition ${activeSubTab === 'recursos'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
           >
             📚 Recursos Extra
