@@ -128,7 +128,7 @@ USE_I18N = True
 USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 
 # ✅ NUEVO: requerido para WhiteNoise en Railway
 STATIC_ROOT = BASE_DIR / "staticfiles"
@@ -158,6 +158,9 @@ if FRONTEND_URL and FRONTEND_URL not in CORS_ALLOWED_ORIGINS:
 # 2. CREDENTIALS (Importante para sesiones persistentes)
 CORS_ALLOW_CREDENTIALS = True
 
+CSRF_TRUSTED_ORIGINS = os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if os.getenv("CSRF_TRUSTED_ORIGINS") else []
+
+
 # 3. HEADERS PERMITIDOS (¡ESTO ES LO QUE TE FALTABA!)
 from corsheaders.defaults import default_headers
 
@@ -178,3 +181,6 @@ REST_FRAMEWORK = {
 
 # API KEY DE GOOGLE (bien por env)
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
+
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+USE_X_FORWARDED_HOST = True
