@@ -1,189 +1,317 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-// import { useAuth } from '../../context/AuthContext'; // Probablemente no necesites useAuth aquí si solo mostrabas datos
 import Layout from '../../Layout';
 import Hero from '../../shared/Hero';
+import { useAuth } from '../../../context/AuthContext';
 
-// ✅ Export directo
 export default function DocenteDashboard() {
   const router = useRouter();
+  const { user, token } = useAuth();
 
   // Estados
-  const [estudiantes, setEstudiantes] = useState([]);
+  const [activeTab, setActiveTab] = useState('estudiantes');
+  const [cursos, setCursos] = useState([]);
+  const [estudiantesData, setEstudiantesData] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [feedback, setFeedback] = useState("");
-  const [selectedEstudiante, setSelectedEstudiante] = useState(null);
-  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+
+  // Estado para editar video
+  const [editingRecurso, setEditingRecurso] = useState(null);
+  const [videoUrlInput, setVideoUrlInput] = useState("");
+
+  const API_URL = 'http://127.0.0.1:8000/api';
 
   useEffect(() => {
-    // ⚠️ Validación de rol eliminada (ya hecha por AuthGuard en pages)
+    if (!token) return;
 
-    // Datos simulados
-    const fetchedEstudiantes = [
-      {
-        id: 1,
-        nombre: 'Juan Pérez',
-        email: 'juan.perez@universidad.edu',
-        ultimaEvaluacion: '15 Nov 2024',
-        curso: 'Base de Datos',
-        modulo: 'Módulo 1',
-        retroalimentacion: 'Excelente rendimiento, sigue así!'
-      },
-      {
-        id: 2,
-        nombre: 'Ana García',
-        email: 'ana.garcia@universidad.edu',
-        ultimaEvaluacion: '14 Nov 2024',
-        curso: 'Base de Datos',
-        modulo: 'Módulo 2',
-        retroalimentacion: 'Buen progreso, revisa algunos conceptos de la última unidad.'
-      },
-      {
-        id: 3,
-        nombre: 'Carlos López',
-        email: 'carlos.lopez@universidad.edu',
-        ultimaEvaluacion: '16 Nov 2024',
-        curso: 'Base de Datos',
-        modulo: 'Módulo 1',
-        retroalimentacion: 'Necesita mejorar en la parte final del curso.'
-      },
-      {
-        id: 4,
-        nombre: 'María Torres',
-        email: 'maria.torres@universidad.edu',
-        ultimaEvaluacion: '15 Nov 2024',
-        curso: 'Base de Datos',
-        modulo: 'Módulo 3',
-        retroalimentacion: 'Excelente atención, sigue manteniendo el enfoque.'
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+
+        // ✅ FUNCIÓN HELPER PARA EVITAR EL ERROR "Unexpected token <"
+        // Si la API falla (404/500), devuelve un array vacío en lugar de romper la app.
+        const safeFetch = async (endpoint) => {
+          try {
+            const res = await fetch(`${API_URL}${endpoint}`, {
+              headers: { 'Authorization': `Token ${token}` }
+            });
+            if (!res.ok) {
+              console.error(`⚠️ Error ${res.status} en ${endpoint}`);
+              return [];
+            }
+            return await res.json();
+          } catch (err) {
+            console.error(`❌ Error de conexión en ${endpoint}:`, err);
+            return [];
+          }
+        };
+
+        // 1. Obtener Cursos del Docente
+        const dataCursos = await safeFetch('/cursos/');
+        setCursos(dataCursos);
+
+        // 2. Identificar qué estudiantes están inscritos en mis cursos
+        const studentIds = new Set();
+        if (dataCursos.length > 0) {
+          dataCursos.forEach(c => {
+            if (c.estudiantes) {
+              c.estudiantes.forEach(id => studentIds.add(id));
+            }
+          });
+        }
+
+        // 3. Obtener Usuarios (Estudiantes)
+        const allStudents = await safeFetch('/users/?rol=estudiante');
+        // Filtramos solo mis alumnos
+        const myStudents = allStudents.filter(s => studentIds.has(s.id));
+
+        // 4. Obtener Resultados del Test D2-R (Capacidad)
+        const dataD2R = await safeFetch('/resultados-d2r/');
+
+        // 5. Obtener Sesiones de Atención (Comportamiento en Video)
+        const dataAtencion = await safeFetch('/atencion/');
+
+        // 6. PROCESAMIENTO INTELIGENTE (Cruzar todo)
+        const estudiantesProcesados = myStudents.map(est => {
+          // A. Buscar mejor resultado D2R
+          const historialD2R = dataD2R.filter(r => String(r.estudiante) === String(est.id));
+          historialD2R.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+          const ultimoD2R = historialD2R[0];
+
+          // B. Calcular promedio de Atención en Videos
+          const sesiones = dataAtencion.filter(s => String(s.estudiante) === String(est.id));
+          const promedioAtencion = sesiones.length > 0
+            ? (sesiones.reduce((acc, curr) => acc + curr.porcentaje_atencion, 0) / sesiones.length).toFixed(1)
+            : 0;
+
+          // C. Diagnóstico Automático (Lógica de Negocio)
+          let diagnostico = "Sin datos suficientes";
+          let colorDiagnostico = "text-gray-400";
+          let recomendacion = "El estudiante debe realizar las actividades.";
+
+          if (ultimoD2R && sesiones.length > 0) {
+            const capacidadAlta = ultimoD2R.con >= 100; // Umbral ejemplo D2R
+            const atencionAlta = promedioAtencion >= 75; // Umbral atención video
+
+            if (capacidadAlta && atencionAlta) {
+              diagnostico = "⭐ Rendimiento Óptimo";
+              colorDiagnostico = "text-green-600";
+              recomendacion = "Potenciar con material avanzado.";
+            } else if (!capacidadAlta && !atencionAlta) {
+              diagnostico = "🚨 Riesgo Académico";
+              colorDiagnostico = "text-red-600";
+              recomendacion = "Requiere tutoría personalizada urgente.";
+            } else if (capacidadAlta && !atencionAlta) {
+              diagnostico = "⚠️ Desmotivación";
+              colorDiagnostico = "text-yellow-600";
+              recomendacion = "Tiene capacidad pero se distrae. Revisar interés.";
+            } else if (!capacidadAlta && atencionAlta) {
+              diagnostico = "💪 Alto Esfuerzo";
+              colorDiagnostico = "text-blue-600";
+              recomendacion = "Felicitar esfuerzo. Reforzar bases cognitivas.";
+            }
+          }
+
+          // Buscar curso de forma segura
+          const cursoDelEstudiante = dataCursos.find(c => c.estudiantes && c.estudiantes.includes(est.id));
+
+          return {
+            id: est.id,
+            nombre: est.nombre_completo || est.username,
+            email: est.email,
+            cursoNombre: cursoDelEstudiante ? cursoDelEstudiante.nombre : 'Sin Asignar',
+
+            // Datos para mostrar
+            d2r_con: ultimoD2R ? ultimoD2R.con : '-',
+            video_avg: sesiones.length > 0 ? `${promedioAtencion}%` : '-',
+            sesiones_count: sesiones.length,
+
+            diagnostico,
+            colorDiagnostico,
+            recomendacion
+          };
+        });
+
+        setEstudiantesData(estudiantesProcesados);
+
+      } catch (error) {
+        console.error("Error cargando datos:", error);
+      } finally {
+        setLoading(false);
       }
-    ];
+    };
 
-    setEstudiantes(fetchedEstudiantes);
-    setLoading(false);
-  }, []);
+    fetchData();
+  }, [token]);
 
-  // Manejadores de eventos (Handlers)
-  const handleAddFeedback = () => {
-    alert(`Agregar retroalimentación para el estudiante: ${selectedEstudiante.nombre} con ID ${selectedEstudiante.id}`);
-    // Aquí iría la llamada al backend
-    setShowFeedbackModal(false);
-    setFeedback("");
+  // --- HANDLERS VIDEO (Tu código original adaptado) ---
+  const openVideoEditor = (recurso) => {
+    setEditingRecurso(recurso);
+    setVideoUrlInput(recurso.url_contenido || "");
   };
 
-  const handleOpenFeedbackModal = (estudiante) => {
-    setSelectedEstudiante(estudiante);
-    setShowFeedbackModal(true);
+  const saveVideoUrl = async () => {
+    if (!editingRecurso || !token) return;
+    try {
+      const res = await fetch(`${API_URL}/recursos/${editingRecurso.id}/`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Token ${token}`
+        },
+        body: JSON.stringify({ url_contenido: videoUrlInput })
+      });
+      if (res.ok) {
+        alert("Video actualizado correctamente");
+        setEditingRecurso(null);
+        window.location.reload();
+      }
+    } catch (error) { console.error(error); }
   };
 
-  return (
-    <Layout>
-      {/* Hero Component integrado */}
-      <Hero
-        title="¡Bienvenido, Docente!"
-        subtitle="Monitorea el rendimiento y nivel de atención de tus estudiantes"
-        bgColor="from-green-600 to-teal-700"
-      />
+  // --- RENDERIZADO ---
 
-      {/* Contenido Principal */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-6">
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">📋 Estudiantes del Curso</h2>
-          <p className="text-gray-600">Revisa el desempeño individual de cada estudiante y agrega retroalimentación.</p>
-        </div>
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case 'estudiantes':
+        return (
+          <div className="grid grid-cols-1 gap-6 animate-fadeIn">
+            {estudiantesData.length > 0 ? estudiantesData.map((est) => (
+              <div key={est.id} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex flex-col md:flex-row hover:shadow-md transition">
+                {/* Perfil del Estudiante */}
+                <div className="p-6 bg-gray-50 md:w-1/3 flex flex-col items-center justify-center border-r border-gray-100">
+                  <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-2xl font-bold mb-3">
+                    {(est.nombre && est.nombre[0]) || 'U'}
+                  </div>
+                  <h3 className="font-bold text-gray-800 text-center">{est.nombre}</h3>
+                  <p className="text-xs text-gray-500 mb-2">{est.email}</p>
+                  <span className="text-[10px] bg-white border px-2 py-1 rounded text-gray-400 uppercase tracking-wide">
+                    {est.cursoNombre}
+                  </span>
+                </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
-              <p className="text-gray-600">Cargando estudiantes...</p>
-            </div>
+                {/* Métricas y Diagnóstico */}
+                <div className="p-6 md:w-2/3 flex flex-col justify-center">
+                  <div className="flex justify-between mb-4">
+                    <div className="text-center w-1/2 border-r border-gray-100">
+                      <p className="text-xs text-blue-800 font-bold uppercase">Capacidad (D2-R)</p>
+                      <p className="text-2xl font-bold text-blue-600">{est.d2r_con}</p>
+                    </div>
+                    <div className="text-center w-1/2">
+                      <p className="text-xs text-purple-800 font-bold uppercase">Atención (Cámara)</p>
+                      <p className="text-2xl font-bold text-purple-600">{est.video_avg}</p>
+                      <p className="text-[9px] text-gray-400">{est.sesiones_count} videos vistos</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-50 p-3 rounded-lg border border-gray-100 text-center">
+                    <p className="text-xs text-gray-400 uppercase font-bold mb-1">Diagnóstico IA</p>
+                    <p className={`text-lg font-bold ${est.colorDiagnostico}`}>
+                      {est.diagnostico}
+                    </p>
+                    <p className="text-xs text-gray-600 mt-1 italic">
+                      "{est.recomendacion}"
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )) : (
+              <div className="text-center py-12 text-gray-400">
+                No hay estudiantes con actividad registrada aún.
+              </div>
+            )}
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {estudiantes.map((estudiante) => (
-              <div key={estudiante.id} className="bg-white rounded-xl shadow-md hover:shadow-xl transition overflow-hidden">
-                <div className="h-2 bg-gradient-to-r from-green-500 to-teal-600"></div>
+        );
 
-                <div className="p-6">
-                  {/* Header del estudiante */}
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-                        <span className="text-2xl">👨‍🎓</span>
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-bold text-gray-800">{estudiante.nombre}</h3>
-                        <p className="text-sm text-gray-500">{estudiante.email}</p>
+      case 'mis-cursos':
+        return (
+          <div className="space-y-6">
+            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 mb-6">
+              <h3 className="font-bold text-blue-800">👋 Panel de Contenido</h3>
+              <p className="text-sm text-blue-600">Gestiona los enlaces de tus videos aquí.</p>
+            </div>
+            {cursos.map(curso => (
+              <div key={curso.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="bg-gray-50 px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">{curso.icon || '📘'}</span>
+                    <h3 className="font-bold text-gray-800">{curso.nombre}</h3>
+                  </div>
+                </div>
+                <div className="p-6 space-y-4">
+                  {curso.modulos?.map(modulo => (
+                    <div key={modulo.id}>
+                      <h4 className="font-bold text-gray-700 mb-2 border-b pb-1">{modulo.nombre}</h4>
+                      <div className="space-y-2 pl-2">
+                        {modulo.recursos?.map(recurso => (
+                          <div key={recurso.id} className="flex justify-between items-center p-2 hover:bg-gray-50 rounded border border-transparent hover:border-gray-200">
+                            <div className="flex items-center gap-2">
+                              <span>{recurso.tipo === 'video' ? '📺' : recurso.tipo === 'quiz' ? '🧠' : '📄'}</span>
+                              <span className="text-sm">{recurso.titulo}</span>
+                            </div>
+                            {recurso.tipo === 'video' && (
+                              <button onClick={() => openVideoEditor(recurso)} className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 font-bold">
+                                Editar Link
+                              </button>
+                            )}
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  </div>
-
-                  {/* Información del curso */}
-                  <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-                    <p className="text-xs text-gray-600">Última evaluación</p>
-                    <p className="text-sm font-semibold text-gray-800">{estudiante.curso} - {estudiante.modulo}</p>
-                    <p className="text-xs text-gray-500 mt-1">📅 {estudiante.ultimaEvaluacion}</p>
-                  </div>
-
-                  {/* Retroalimentación existente */}
-                  <div className="mb-4 p-3 bg-yellow-50 rounded-lg">
-                    <p className="text-xs text-gray-600 mb-1">Retroalimentación actual</p>
-                    <p className="text-sm text-gray-700 italic">"{estudiante.retroalimentacion}"</p>
-                    <div className="flex space-x-4 mt-3">
-                      <button
-                        onClick={() => handleOpenFeedbackModal(estudiante)}
-                        className="text-sm bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-md transition"
-                      >
-                        ✏️ Editar Feedback
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Ver detalles */}
-                  <button
-                    onClick={() => router.push(`/resultados/${estudiante.id}`)}
-                    className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-lg transition flex items-center justify-center space-x-2"
-                  >
-                    <span>📊</span>
-                    <span>Ver Análisis Detallado</span>
-                  </button>
+                  ))}
                 </div>
               </div>
             ))}
           </div>
+        );
+
+      default: return null;
+    }
+  };
+
+  return (
+    <Layout>
+      <Hero title="Panel Docente" subtitle="Analítica Avanzada de Atención y Rendimiento" bgColor="from-green-600 to-teal-700" />
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex space-x-2 bg-gray-100 p-1 rounded-xl mb-8 w-fit">
+          <button
+            onClick={() => setActiveTab('estudiantes')}
+            className={`py-2 px-6 rounded-lg font-medium text-sm transition ${activeTab === 'estudiantes' ? 'bg-white text-green-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            📊 Reporte de Atención
+          </button>
+          <button
+            onClick={() => setActiveTab('mis-cursos')}
+            className={`py-2 px-6 rounded-lg font-medium text-sm transition ${activeTab === 'mis-cursos' ? 'bg-white text-green-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            📚 Gestión de Cursos
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="flex justify-center py-10">
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-green-600"></div>
+          </div>
+        ) : (
+          renderTabContent()
         )}
       </div>
 
-      {/* Modal para agregar retroalimentación */}
-      {showFeedbackModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl transform transition-all">
-            <h3 className="text-2xl font-bold text-gray-800 mb-4">
-              Feedback para {selectedEstudiante?.nombre.split(' ')[0]}
-            </h3>
-            <p className="text-sm text-gray-500 mb-4">Agrega comentarios sobre el desempeño reciente.</p>
-
-            <textarea
-              className="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none"
-              rows="4"
-              placeholder="Escribe la retroalimentación aquí..."
-              value={feedback}
-              onChange={(e) => setFeedback(e.target.value)}
-            ></textarea>
-
-            <div className="mt-6 flex justify-between space-x-3">
-              <button
-                onClick={() => setShowFeedbackModal(false)}
-                className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded-lg transition"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleAddFeedback}
-                className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg transition"
-              >
-                Guardar
-              </button>
+      {/* Modal Video */}
+      {editingRecurso && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-xl p-6 w-full max-w-lg shadow-2xl">
+            <h3 className="text-lg font-bold mb-4">Editar Video</h3>
+            <input
+              type="text"
+              value={videoUrlInput}
+              onChange={(e) => setVideoUrlInput(e.target.value)}
+              className="w-full p-3 border rounded mb-4"
+              placeholder="URL YouTube"
+            />
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setEditingRecurso(null)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded">Cancelar</button>
+              <button onClick={saveVideoUrl} className="px-4 py-2 bg-green-600 text-white rounded font-bold">Guardar</button>
             </div>
           </div>
         </div>

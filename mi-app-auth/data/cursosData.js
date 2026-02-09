@@ -26,14 +26,6 @@ export const cursosData = {
             videoUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ' // URL de ejemplo válida
           },
           {
-            id: '1-2',
-            tipo: 'lectura',
-            titulo: 'Historia de las bases de datos',
-            descripcion: 'Lectura guiada sobre la evolución histórica.',
-            duracion: '10 min',
-            contenido: `Antes de que existieran las bases de datos modernas...`
-          },
-          {
             id: '1-3',
             tipo: 'quiz',
             titulo: 'Test: D2R',
@@ -62,30 +54,6 @@ export const cursosData = {
           }
         ]
       },
-      2: {
-        id: 2,
-        nombre: 'Módulo 2: Modelo Relacional',
-        descripcion: 'Tablas, relaciones y normalización',
-        recursos: [
-          {
-            id: '2-1',
-            tipo: 'video',
-            titulo: 'Tablas y relaciones',
-            descripcion: 'Estructura de tablas y FK/PK.',
-            duracion: '22:15'
-          }
-        ],
-        recomendaciones: []
-      },
-      3: {
-        id: 3,
-        nombre: 'Módulo 3: SQL Básico',
-        descripcion: 'Consultas, filtros y operaciones básicas',
-        recursos: [
-          { id: '3-1', tipo: 'video', titulo: 'SELECT y WHERE', duracion: '20:00' }
-        ],
-        recomendaciones: []
-      }
     }
   }
 };

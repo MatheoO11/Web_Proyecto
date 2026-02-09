@@ -8,11 +8,10 @@ class CustomUser(AbstractUser):
         ('docente', 'Docente'),
         ('estudiante', 'Estudiante'),
     )
-
     rol = models.CharField(max_length=20, choices=ROLE_CHOICES, default='estudiante')
+
     email = models.EmailField(unique=True)
 
-    # Configuración para usar email en vez de username
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username', 'rol']
 
