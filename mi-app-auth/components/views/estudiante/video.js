@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../../context/AuthContext';
 import { analyzeAttentionState } from '../../../lib/attentionMath';
+import { API_URL } from '@/config/api';
 
 export default function Video({ isRecording = false, recursoId }) {
   const { token } = useAuth();
@@ -109,7 +110,7 @@ export default function Video({ isRecording = false, recursoId }) {
     };
 
     try {
-      await fetch('http://127.0.0.1:8000/api/atencion/', {
+      await fetch(`${API_URL}/api/atencion/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

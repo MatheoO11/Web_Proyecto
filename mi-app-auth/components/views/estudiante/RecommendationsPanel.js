@@ -4,6 +4,7 @@ import { useAuth } from '../../../context/AuthContext';
 import EvaluacionAdaptativa from './EvaluacionAdaptativa';
 import ResultadosEvolucion from './ResultadosEvolucion';
 import RecursosRecomendados from './RecursosRecomendados';
+import { API_URL } from '@/config/api';
 
 export default function RecommendationsPanel() {
   const { token } = useAuth();
@@ -27,7 +28,7 @@ export default function RecommendationsPanel() {
     setError(null);
 
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/recomendaciones/', {
+      const res = await fetch(`${API_URL}/api/recomendaciones/`, {
         headers: { Authorization: `Token ${token}` },
       });
 

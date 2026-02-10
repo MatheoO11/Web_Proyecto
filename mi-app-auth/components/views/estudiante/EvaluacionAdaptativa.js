@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '../../../context/AuthContext';
+import { API_URL } from '@/config/api';
 
 export default function EvaluacionAdaptativa({ recursoId = null, onClose }) {
   const { token } = useAuth();
@@ -30,7 +31,7 @@ export default function EvaluacionAdaptativa({ recursoId = null, onClose }) {
     setError(null);
 
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/generar-evaluacion/', {
+      const res = await fetch(`${API_URL}/api/generar-evaluacion/`, {
         method: 'POST',
         headers: {
           Authorization: `Token ${token}`,
@@ -83,7 +84,7 @@ export default function EvaluacionAdaptativa({ recursoId = null, onClose }) {
     const respuestasArray = preguntas.map((_, index) => respuestas[index]);
 
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/enviar-respuestas/', {
+      const res = await fetch(`${API_URL}/api/enviar-respuestas/`, {
         method: 'POST',
         headers: {
           Authorization: `Token ${token}`,

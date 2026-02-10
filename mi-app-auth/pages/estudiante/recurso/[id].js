@@ -6,6 +6,7 @@ import AuthGuard from '../../../components/AuthGuard';
 import TestD2R from '../../../components/views/estudiante/TestD2R';
 import Video from '../../../components/views/estudiante/video';
 import SmartVideo from '../../../components/views/estudiante/SmartVideo';
+import { API_URL } from '@/config/api';
 
 function RecursoDetalle() {
   const router = useRouter();
@@ -24,7 +25,7 @@ function RecursoDetalle() {
 
     const fetchData = async () => {
       try {
-        const resRecurso = await fetch(`http://127.0.0.1:8000/api/recursos/${id}/`, {
+        const resRecurso = await fetch(`${API_URL}/api/recursos/${id}/`, {
           headers: { 'Authorization': `Token ${token}` }
         });
 
@@ -39,7 +40,7 @@ function RecursoDetalle() {
 
         // curso a través del módulo
         if (dataRecurso.modulo) {
-          const resModulo = await fetch(`http://127.0.0.1:8000/api/modulos/${dataRecurso.modulo}/`, {
+          const resModulo = await fetch(`${API_URL}/api/modulos/${dataRecurso.modulo}/`, {
             headers: { 'Authorization': `Token ${token}` }
           });
           if (resModulo.ok) {

@@ -1,16 +1,16 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
+import { API_URL } from '@/config/api';
 
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(null); // <--- AGREGADO: Estado para el token
+  const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState(null);
 
   const router = useRouter();
-  const API_URL = 'http://127.0.0.1:8000/api';
 
   useEffect(() => {
     checkUser();
@@ -18,17 +18,17 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const checkUser = async () => {
-    const storedToken = localStorage.getItem('token'); // <--- Leemos del localStorage
+    const storedToken = localStorage.getItem('token');
     if (!storedToken) {
       setLoading(false);
       return;
     }
 
-    // Guardamos el token en el estado para que el Dashboard lo pueda usar
     setToken(storedToken);
 
     try {
-      const res = await fetch(`${API_URL}/me/`, {
+      // ✅ CORREGIDO: Agregado /api/
+      const res = await fetch(`${API_URL}/api/me/`, {
         headers: { Authorization: `Token ${storedToken}` },
       });
       if (res.ok) {
@@ -36,7 +36,7 @@ export const AuthProvider = ({ children }) => {
         setUser(data);
       } else {
         localStorage.removeItem('token');
-        setToken(null); // Limpiamos estado
+        setToken(null);
         setUser(null);
       }
     } catch (error) {
@@ -51,7 +51,8 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     setAuthError(null);
     try {
-      const res = await fetch(`${API_URL}/login/`, {
+      // ✅ CORREGIDO: Agregado /api/
+      const res = await fetch(`${API_URL}/api/login/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: email, password }),
@@ -61,7 +62,7 @@ export const AuthProvider = ({ children }) => {
 
       if (res.ok) {
         localStorage.setItem('token', data.token);
-        setToken(data.token); // <--- Actualizamos estado
+        setToken(data.token);
 
         const userData = { email, ...data };
         setUser(userData);
@@ -86,7 +87,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = () => {
     localStorage.removeItem('token');
-    setToken(null); // <--- Limpiamos estado
+    setToken(null);
     setUser(null);
     router.push('/');
   };
@@ -96,7 +97,7 @@ export const AuthProvider = ({ children }) => {
   return (
     <AuthContext.Provider value={{
       user,
-      token, // <--- IMPORTANTE: Ahora exportamos el token
+      token,
       loading,
       login,
       logout,

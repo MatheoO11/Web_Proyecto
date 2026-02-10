@@ -1,6 +1,7 @@
 // components/views/estudiante/RecursosRecomendados.js
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../../context/AuthContext';
+import { API_URL } from '@/config/api';
 
 export default function RecursosRecomendados() {
   const { token } = useAuth();
@@ -16,7 +17,7 @@ export default function RecursosRecomendados() {
     if (!token) return;
 
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/recursos-recomendados/', {
+      const res = await fetch(`${API_URL}/api/recursos-recomendados/`, {
         headers: { 'Authorization': `Token ${token}` }
       });
 
@@ -34,7 +35,7 @@ export default function RecursosRecomendados() {
 
   const marcarComoVisto = async (recursoId) => {
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/marcar-recurso-visto/', {
+      const res = await fetch(`${API_URL}/api/marcar-recurso-visto/`, {
         method: 'POST',
         headers: {
           'Authorization': `Token ${token}`,

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../../context/AuthContext';
 import Button from '../../common/Button';
+import { API_URL } from '@/config/api';
 
 export default function TestD2R({ cursoId, recursoId, onFinished }) {
   const { token } = useAuth();
@@ -158,7 +159,7 @@ export default function TestD2R({ cursoId, recursoId, onFinished }) {
     setResultadosFinales({ ...payload, e_porcentaje });
 
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/resultados-d2r/', {
+      const res = await fetch(`${API_URL}/api/resultados-d2r/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

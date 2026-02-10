@@ -1,6 +1,7 @@
 // components/views/estudiante/ResultadosEvolucion.js
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../../context/AuthContext';
+import { API_URL } from '@/config/api';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -40,7 +41,7 @@ export default function ResultadosEvolucion() {
     if (!token) return;
 
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/historial-evaluaciones/', {
+      const res = await fetch(`${API_URL}/api/historial-evaluaciones/`, {
         headers: { 'Authorization': `Token ${token}` }
       });
 

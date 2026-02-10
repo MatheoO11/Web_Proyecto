@@ -33,6 +33,7 @@ DEBUG = os.getenv("DEBUG", "1") == "1"
 ALLOWED_HOSTS = [
     "localhost",
     "127.0.0.1",
+    "webproyecto-production.up.railway.app",
 ]
 _extra_hosts = os.getenv("ALLOWED_HOSTS", "")
 if _extra_hosts:
@@ -149,6 +150,7 @@ AUTH_USER_MODEL = 'users.CustomUser'
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "https://web-proyecto-ghbpl05oa-matheo-onas-projects.vercel.app",
 ]
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "")

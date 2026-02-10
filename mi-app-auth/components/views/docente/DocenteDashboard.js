@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import Layout from '../../Layout';
 import Hero from '../../shared/Hero';
 import { useAuth } from '../../../context/AuthContext';
+import { API_URL } from '@/config/api';
 
 export default function DocenteDashboard() {
   const router = useRouter();
@@ -18,7 +19,6 @@ export default function DocenteDashboard() {
   const [editingRecurso, setEditingRecurso] = useState(null);
   const [videoUrlInput, setVideoUrlInput] = useState("");
 
-  const API_URL = 'http://127.0.0.1:8000/api';
 
   useEffect(() => {
     if (!token) return;

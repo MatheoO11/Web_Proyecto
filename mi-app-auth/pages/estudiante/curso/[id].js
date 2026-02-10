@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import Layout from '../../../components/Layout';
 import AuthGuard from '../../../components/AuthGuard';
 import { useAuth } from '../../../context/AuthContext';
+import { API_URL } from '@/config/api';
 
 function CursoMenu() {
   const router = useRouter();
@@ -19,7 +20,7 @@ function CursoMenu() {
     const fetchDetallesCurso = async () => {
       try {
         // Petición a tu API Django
-        const res = await fetch(`http://127.0.0.1:8000/api/cursos/${id}/`, {
+        const res = await fetch(`${API_URL}/api/cursos/${id}/`, {
           headers: { 'Authorization': `Token ${token}` }
         });
 

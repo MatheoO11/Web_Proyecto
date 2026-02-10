@@ -5,6 +5,7 @@ import { useAuth } from '../../../context/AuthContext';
 import Layout from '../../Layout';
 import Hero from '../../shared/Hero';
 import RecommendationsPanel from './RecommendationsPanel';
+import { API_URL } from '@/config/api';
 
 export default function StudentDashboard() {
   const { user, token } = useAuth();
@@ -24,7 +25,7 @@ export default function StudentDashboard() {
       if (!token) return;
 
       try {
-        const res = await fetch('http://127.0.0.1:8000/api/cursos/', {
+        const res = await fetch(`${API_URL}/api/cursos/`, {
           headers: { 'Authorization': `Token ${token}` }
         });
 

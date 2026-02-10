@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import Layout from '../../../components/Layout';
 import AuthGuard from '../../../components/AuthGuard';
 import { useAuth } from '../../../context/AuthContext';
+import { API_URL } from '@/config/api';
 
 function DetalleEstudianteDocente() {
   const router = useRouter();
@@ -23,7 +24,7 @@ function DetalleEstudianteDocente() {
         // Nota: Si no tienes endpoint de detalle de usuario, esto podría requerir ajuste en backend.
         // Usaremos el filtro de resultados que ya tienes implementado.
 
-        const resResultados = await fetch(`http://127.0.0.1:8000/api/resultados-d2r/`, {
+        const res = await fetch(`${API_URL}/api/resultados-d2r/`, {
           headers: { 'Authorization': `Token ${token}` }
         });
         const dataResultados = await resResultados.json();
