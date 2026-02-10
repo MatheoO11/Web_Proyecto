@@ -1,12 +1,14 @@
 from rest_framework import serializers
 from .models import ResultadoD2R, DetalleFilaD2R, SesionAtencion, DetalleAtencion
 
+
 # --- SERIALIZADORES D2R (Test de Atención) ---
 
 class DetalleFilaSerializer(serializers.ModelSerializer):
     class Meta:
         model = DetalleFilaD2R
         fields = ['numero_fila', 'tr', 'ta', 'eo', 'ec']
+
 
 class ResultadoD2RSerializer(serializers.ModelSerializer):
     # Aceptamos el array de filas anidado para guardarlo en una sola petición
@@ -15,25 +17,65 @@ class ResultadoD2RSerializer(serializers.ModelSerializer):
     class Meta:
         model = ResultadoD2R
         fields = '__all__'
-        read_only_fields = ('fecha', 'estudiante') # El estudiante se asigna automáticamente
+        read_only_fields = ('fecha', 'estudiante')  # El estudiante se asigna automáticamente
 
     def create(self, validated_data):
-        # 1. Separamos los datos de las filas
-        filas_data = validated_data.pop('filas')
+        """
+        OPCIÓN A (Recomendada):
+        - El Frontend puede calcular y enviar totales/índices,
+          pero el Backend SIEMPRE recalcula desde 'filas' y sobrescribe.
+        - Esto evita manipulación de resultados y deja todo consistente.
+        """
 
-        # 2. Asignamos el usuario logueado
+        # 1) Separamos los datos de las filas
+        filas_data = validated_data.pop('filas', [])
+
+        # 2) Asignamos el usuario logueado
         user = self.context['request'].user
         validated_data['estudiante'] = user
 
-        # 3. Creamos el resultado general (Cabecera)
-        # Nota: Como usamos fields='__all__', aceptará 'tot', 'con', 'var' automáticamente
+        # --- Recalcular totales desde filas (fuente de verdad) ---
+        def _to_int(v):
+            try:
+                return int(v)
+            except Exception:
+                return 0
+
+        tr_total_calc = sum(_to_int(f.get('tr', 0)) for f in filas_data)
+        ta_total_calc = sum(_to_int(f.get('ta', 0)) for f in filas_data)
+        eo_total_calc = sum(_to_int(f.get('eo', 0)) for f in filas_data)
+        ec_total_calc = sum(_to_int(f.get('ec', 0)) for f in filas_data)
+
+        # Fórmulas actuales según tu frontend:
+        # TOT = TR total
+        tot_calc = tr_total_calc
+
+        # CON = TA - EC
+        con_calc = ta_total_calc - ec_total_calc
+
+        # VAR = (max(TR fila) - min(TR fila))
+        tr_por_fila = [_to_int(f.get('tr', 0)) for f in filas_data]
+        var_calc = (max(tr_por_fila) - min(tr_por_fila)) if tr_por_fila else 0.0
+
+        # 3) Sobrescribimos siempre con cálculo del backend (seguro)
+        validated_data['tr_total'] = tr_total_calc
+        validated_data['ta_total'] = ta_total_calc
+        validated_data['eo_total'] = eo_total_calc
+        validated_data['ec_total'] = ec_total_calc
+        validated_data['tot'] = tot_calc
+        validated_data['con'] = float(con_calc)
+        validated_data['var'] = float(var_calc)
+
+        # 4) Creamos el resultado general (Cabecera)
+        # Nota: interpretacion puede venir del frontend y se guarda tal cual
         resultado = ResultadoD2R.objects.create(**validated_data)
 
-        # 4. Creamos el detalle fila por fila
+        # 5) Creamos el detalle fila por fila
         for fila_data in filas_data:
             DetalleFilaD2R.objects.create(test=resultado, **fila_data)
 
         return resultado
+
 
 # --- SERIALIZADORES ATENCIÓN (Cámara/IA) ---
 
@@ -41,6 +83,7 @@ class DetalleAtencionSerializer(serializers.ModelSerializer):
     class Meta:
         model = DetalleAtencion
         fields = ['segundo', 'es_distraido']
+
 
 class SesionAtencionSerializer(serializers.ModelSerializer):
     # Campo de escritura: Recibe la lista gigante de segundos
