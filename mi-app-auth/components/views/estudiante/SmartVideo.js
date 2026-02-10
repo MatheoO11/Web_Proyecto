@@ -1,7 +1,14 @@
 import { useState, useRef, useEffect } from 'react';
 
 // ✅ VERSIÓN API NATIVA (Estable y Ligera)
-export default function SmartVideo({ videoUrl, checkpoints = [], onVideoStart, onVideoEnd }) {
+// CAMBIO: ahora distinguimos PAUSE vs ENDED para no guardar cuando se pausa por preguntas
+export default function SmartVideo({
+  videoUrl,
+  checkpoints = [],
+  onVideoStart,
+  onVideoPause,
+  onVideoEnded
+}) {
   const [checkpointActual, setCheckpointActual] = useState(null);
   const [videoTerminado, setVideoTerminado] = useState(false);
   const [playerReady, setPlayerReady] = useState(false);
@@ -11,10 +18,13 @@ export default function SmartVideo({ videoUrl, checkpoints = [], onVideoStart, o
   // Feedback visual (Colores al responder)
   const [feedback, setFeedback] = useState(null);
 
-  // Referencias para controlar el player sin re-renderizar
+  // Referencias
   const playerRef = useRef(null);
   const intervalRef = useRef(null);
   const preguntasRef = useRef([]);
+
+  // Para evitar “doble ended” por bugs o re-render
+  const endedOnceRef = useRef(false);
 
   // Extraer ID de YouTube de la URL
   const getVideoId = (url) => {
@@ -31,6 +41,9 @@ export default function SmartVideo({ videoUrl, checkpoints = [], onVideoStart, o
       const nuevasPreguntas = checkpoints.map(cp => ({ ...cp, visto: false }));
       setPreguntasEstado(nuevasPreguntas);
       preguntasRef.current = nuevasPreguntas;
+    } else {
+      setPreguntasEstado([]);
+      preguntasRef.current = [];
     }
   }, [checkpoints]);
 
@@ -38,11 +51,12 @@ export default function SmartVideo({ videoUrl, checkpoints = [], onVideoStart, o
   useEffect(() => {
     if (!videoId) return;
 
+    endedOnceRef.current = false;
+
     const initPlayer = () => {
       // Limpiar instancia previa si existe
       if (playerRef.current) {
         try {
-          // Si tiene método destroy, lo usamos
           if (typeof playerRef.current.destroy === 'function') playerRef.current.destroy();
         } catch (e) { }
       }
@@ -86,11 +100,10 @@ export default function SmartVideo({ videoUrl, checkpoints = [], onVideoStart, o
 
   // --- 3. Handlers del Player ---
 
-  const handlePlayerReady = (event) => {
+  const handlePlayerReady = () => {
     console.log("✅ Player listo");
     setPlayerReady(true);
 
-    // Iniciar el vigilante del tiempo
     if (intervalRef.current) clearInterval(intervalRef.current);
     intervalRef.current = setInterval(() => {
       if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function') {
@@ -101,20 +114,33 @@ export default function SmartVideo({ videoUrl, checkpoints = [], onVideoStart, o
   };
 
   const handleStateChange = (event) => {
-    // Estado 1 = Reproduciendo (PLAY) -> Encendemos cámara
+    // Estado 1 = Reproduciendo (PLAY)
     if (event.data === 1) {
+      // Si el usuario volvió a reproducir después de terminar y reiniciar
+      if (videoTerminado) setVideoTerminado(false);
+
       if (onVideoStart) onVideoStart();
     }
-    // Estado 2 = Pausado (PAUSE) -> Apagamos cámara
+
+    // Estado 2 = Pausado (PAUSE)
+    // IMPORTANTE: aquí cae cuando pausas por preguntas.
+    // Solo apagamos cámara/IA, pero NO guardamos sesión.
     if (event.data === 2) {
-      if (onVideoEnd) onVideoEnd();
+      if (onVideoPause) onVideoPause();
     }
+
     // Estado 0 = Terminado (ENDED)
     if (event.data === 0) {
+      if (endedOnceRef.current) return; // evita doble disparo
+      endedOnceRef.current = true;
+
       console.log("🏁 Video terminado");
       setVideoTerminado(true);
+
       if (intervalRef.current) clearInterval(intervalRef.current);
-      if (onVideoEnd) onVideoEnd(); // Apagamos cámara
+
+      // ✅ Aquí sí: terminó realmente el video
+      if (onVideoEnded) onVideoEnded();
     }
   };
 
@@ -127,12 +153,13 @@ export default function SmartVideo({ videoUrl, checkpoints = [], onVideoStart, o
 
   const checkForCheckpoint = (currentTime) => {
     const preguntasActuales = preguntasRef.current;
+
     const preguntaEncontrada = preguntasActuales.find(
       p => p.segundo == currentTime && !p.visto
     );
 
     if (preguntaEncontrada) {
-      // Pausar video
+      // Pausar video (esto dispara PAUSE -> onVideoPause)
       if (playerRef.current && typeof playerRef.current.pauseVideo === 'function') {
         playerRef.current.pauseVideo();
       }
@@ -166,7 +193,7 @@ export default function SmartVideo({ videoUrl, checkpoints = [], onVideoStart, o
       setCheckpointActual(null);
 
       if (playerRef.current && typeof playerRef.current.playVideo === 'function') {
-        playerRef.current.playVideo();
+        playerRef.current.playVideo(); // esto dispara PLAY -> onVideoStart
       }
     }, 2000);
   };
@@ -184,7 +211,7 @@ export default function SmartVideo({ videoUrl, checkpoints = [], onVideoStart, o
         </div>
       )}
 
-      {/* Contenedor YouTube (ID crucial para la API) */}
+      {/* Contenedor YouTube */}
       <div className="relative w-full" style={{ paddingTop: '56.25%' }}>
         <div id="youtube-player-div" className="absolute top-0 left-0 w-full h-full"></div>
 
@@ -213,8 +240,15 @@ export default function SmartVideo({ videoUrl, checkpoints = [], onVideoStart, o
                 }
 
                 return (
-                  <button key={idx} onClick={() => handleResponder(idx)} disabled={!!feedback} className={`w-full text-left p-4 rounded-lg border-2 transition flex items-center group font-medium ${claseBtn}`}>
-                    <span className="w-6 h-6 rounded-full border-2 border-current mr-3 flex items-center justify-center text-xs opacity-70">{letras[idx]}</span>
+                  <button
+                    key={idx}
+                    onClick={() => handleResponder(idx)}
+                    disabled={!!feedback}
+                    className={`w-full text-left p-4 rounded-lg border-2 transition flex items-center group font-medium ${claseBtn}`}
+                  >
+                    <span className="w-6 h-6 rounded-full border-2 border-current mr-3 flex items-center justify-center text-xs opacity-70">
+                      {letras[idx]}
+                    </span>
                     {opcion}
                   </button>
                 );
@@ -236,7 +270,7 @@ export default function SmartVideo({ videoUrl, checkpoints = [], onVideoStart, o
           <button
             onClick={() => {
               setVideoTerminado(false);
-              // Reinicio manual usando la API nativa
+              endedOnceRef.current = false; // permitir un nuevo ciclo
               if (playerRef.current && typeof playerRef.current.seekTo === 'function') {
                 playerRef.current.seekTo(0);
                 playerRef.current.playVideo();

@@ -11,6 +11,6 @@ router.register(r'cursos', CursoViewSet, basename='cursos')
 router.register(r'modulos', ModuloViewSet, basename='modulos')
 router.register(r'recursos', RecursoViewSet, basename='recursos')
 router.register(r'resultados-d2r', ResultadoD2RViewSet, basename='resultados-d2r')
-router.register(r'atencion', SesionAtencionViewSet, basename='atencion')  # ✅ /api/atencion/
+router.register(r'atencion', SesionAtencionViewSet, basename='atencion')  
 
 urlpatterns = router.urls

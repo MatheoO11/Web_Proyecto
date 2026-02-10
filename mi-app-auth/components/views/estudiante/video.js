@@ -4,7 +4,7 @@ import { useAuth } from '../../../context/AuthContext';
 import { analyzeAttentionState } from '../../../lib/attentionMath';
 import { API_URL } from '@/config/api';
 
-export default function Video({ isRecording = false, recursoId }) {
+export default function Video({ isRecording = false, recursoId, finalizeKey = 0 }) {
   const { token } = useAuth();
   const [estadoAtencion, setEstadoAtencion] = useState('Esperando video...');
   const [distraccionDetectada, setDistraccionDetectada] = useState(false);
@@ -56,6 +56,7 @@ export default function Video({ isRecording = false, recursoId }) {
       }, 1000);
 
     } else {
+      // Solo “pausa” el tracking. NO guardar aquí.
       setEstadoAtencion("En espera del video...");
       setDistraccionDetectada(false);
       distraccionRef.current = false;
@@ -63,28 +64,37 @@ export default function Video({ isRecording = false, recursoId }) {
       windowRef.current = [];
 
       if (samplerInterval) clearInterval(samplerInterval);
-
-      // Al detenerse, intentar guardar
-      if (statsRef.current.inicio > 0) {
-        const duracion = (Date.now() - statsRef.current.inicio) / 1000;
-        console.log(`⏱️ [IA] Fin de sesión. Duración: ${duracion.toFixed(2)}s`);
-
-        if (duracion > 2 && recursoId) {
-          guardarSesion(
-            duracion,
-            statsRef.current.framesDistraido,
-            statsRef.current.framesTotales,
-            timelineRef.current
-          );
-        } else {
-          console.warn(`⚠️ NO SE GUARDÓ: Duración (${duracion}s) menor a 2s o falta ID.`);
-        }
-        statsRef.current.inicio = 0;
-      }
+      // ❌ NO GUARDAR AQUÍ (para evitar duplicados por pausas/preguntas)
     }
 
     return () => { if (samplerInterval) clearInterval(samplerInterval); };
   }, [isRecording, recursoId]);
+
+  // ✅ 1.1 Guardar SOLO cuando el padre indique “finalizó video”
+  useEffect(() => {
+    if (!token) return;
+    if (finalizeKey <= 0) return;
+
+    // Si nunca se inició, no guardes
+    if (statsRef.current.inicio <= 0) return;
+
+    const duracion = (Date.now() - statsRef.current.inicio) / 1000;
+    console.log(`🏁 [IA] Final del video. Duración total: ${duracion.toFixed(2)}s`);
+
+    if (duracion > 2 && recursoId) {
+      guardarSesion(
+        duracion,
+        statsRef.current.framesDistraido,
+        statsRef.current.framesTotales,
+        timelineRef.current
+      );
+    } else {
+      console.warn(`⚠️ NO SE GUARDÓ: Duración (${duracion}s) menor a 2s o falta ID.`);
+    }
+
+    // Reset para evitar doble guardado
+    statsRef.current.inicio = 0;
+  }, [finalizeKey, recursoId, token]);
 
   const guardarSesion = async (duracion, framesMalos, framesTotales, timeline) => {
     if (!token) return;
@@ -110,7 +120,7 @@ export default function Video({ isRecording = false, recursoId }) {
     };
 
     try {
-      await fetch(`${API_URL}/api/atencion/`, {
+      const res = await fetch(`${API_URL}/api/atencion/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -118,6 +128,13 @@ export default function Video({ isRecording = false, recursoId }) {
         },
         body: JSON.stringify(payload)
       });
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        console.error("❌ Error guardando sesión. Status:", res.status, txt);
+      } else {
+        console.log("✅ Sesión guardada correctamente");
+      }
     } catch (e) {
       console.error("❌ Error guardando sesión:", e);
     }
@@ -151,18 +168,13 @@ export default function Video({ isRecording = false, recursoId }) {
         if (webcamRef.current) {
           const camera = new Camera(webcamRef.current, {
             onFrame: async () => {
-              // 🛑🛑 CORRECCIÓN CRÍTICA AQUÍ 🛑🛑
-              // Verificamos que el componente siga montado y el video exista
-              // antes de intentar leer sus propiedades.
               if (!isMounted || !webcamRef.current || !faceMeshRef.current) return;
 
-              // Verificación extra: si el video no tiene dimensiones, abortamos
               if (webcamRef.current.videoWidth === 0 || webcamRef.current.videoHeight === 0) return;
 
               try {
                 await faceMeshRef.current.send({ image: webcamRef.current });
               } catch (err) {
-                // Silenciamos errores de "send" al desmontar
                 console.warn("Frame omitido por desmontaje");
               }
             },
@@ -185,17 +197,14 @@ export default function Video({ isRecording = false, recursoId }) {
     return () => {
       isMounted = false;
       if (cameraRef.current) {
-        // Detener cámara inmediatamente
         cameraRef.current.stop();
       }
-      // Limpiamos referencias para que el garbage collector actúe
       faceMeshRef.current = null;
     };
   }, []);
 
   // --- 3. ALGORITMO DE ATENCIÓN ---
   const onResults = (results) => {
-    // Si ya no estamos grabando o el componente se desmontó, no hacemos nada
     if (!recordingRef.current) return;
 
     statsRef.current.framesTotales++;

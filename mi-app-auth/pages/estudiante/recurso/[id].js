@@ -20,6 +20,8 @@ function RecursoDetalle() {
   // ✅ control cámara SOLO para video
   const [isRecording, setIsRecording] = useState(false);
 
+  const [finalizeKey, setFinalizeKey] = useState(0);
+
   useEffect(() => {
     if (!router.isReady || !id || !token) return;
 
@@ -71,7 +73,11 @@ function RecursoDetalle() {
 
   // video <-> cámara
   const handleVideoStart = () => setIsRecording(true);
-  const handleVideoEnd = () => setTimeout(() => setIsRecording(false), 1000);
+  const handleVideoPause = () => setTimeout(() => setIsRecording(false), 200);
+  const handleVideoEnded = () => {
+    setTimeout(() => setIsRecording(false), 200);
+    setFinalizeKey((k) => k + 1);
+  };
 
   if (loading) {
     return (
@@ -157,7 +163,8 @@ function RecursoDetalle() {
                     videoUrl={recurso.url_contenido}
                     checkpoints={recurso.preguntas || []}
                     onVideoStart={handleVideoStart}
-                    onVideoEnd={handleVideoEnd}
+                    onVideoPause={handleVideoPause}
+                    onVideoEnded={handleVideoEnded}
                   />
                 ) : (
                   <div className="aspect-video bg-gray-200 rounded-xl flex items-center justify-center text-gray-500 border border-dashed border-gray-400">
@@ -204,7 +211,7 @@ function RecursoDetalle() {
                   </span>
                 </div>
 
-                <Video isRecording={isRecording} recursoId={recurso.id} />
+                <Video isRecording={isRecording} recursoId={recurso.id} finalizeKey={finalizeKey} />
 
                 <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-xl shadow-sm p-4 border border-purple-100 mt-2">
                   <h3 className="text-xs font-bold text-purple-900 mb-2 flex items-center">
