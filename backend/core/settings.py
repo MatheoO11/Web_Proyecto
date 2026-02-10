@@ -150,7 +150,7 @@ AUTH_USER_MODEL = 'users.CustomUser'
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    "https://web-proyecto-ghbpl05oa-matheo-onas-projects.vercel.app",
+    "https://web-proyecto-six.vercel.app",
 ]
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "")
