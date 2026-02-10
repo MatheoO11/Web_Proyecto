@@ -346,7 +346,6 @@ def generar_recursos_recomendados_bd(estudiante, recurso, nivel_atencion):
             descripcion="Material de apoyo generado por tu resultado en la evaluación.",
             tipo="video",
             prioridad="alta" if i < 3 else "media",
-            razon_recomendacion="Refuerzo adaptativo",
             recurso_original=recurso,
             url="https://youtube.com",
         )
