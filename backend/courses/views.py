@@ -76,14 +76,14 @@ def obtener_ultimo_d2r(user):
         return {'existe': False}
 
 def obtener_sesiones_atencion(user, limit=10):
-    """Obtiene las últimas sesiones de atención del estudiante"""
-    from analytics.models import AtencionSesion
+    """Obtiene las últimas sesiones de atención del estudiante (desde evaluaciones)."""
+    from evaluaciones.models import SesionAtencion
 
-    sesiones = AtencionSesion.objects.filter(
-        user=user
-    ).select_related(
-        'recurso', 'recurso__modulo', 'recurso__modulo__curso'
-    ).order_by('-fecha_creacion')[:limit]
+    sesiones = (
+        SesionAtencion.objects.filter(estudiante=user)
+        .select_related('recurso', 'recurso__modulo', 'recurso__modulo__curso')
+        .order_by('-fecha')[:limit]
+    )
 
     resultado = []
     for sesion in sesiones:
@@ -94,13 +94,14 @@ def obtener_sesiones_atencion(user, limit=10):
                 'recurso_id': sesion.recurso.id,
                 'modulo': sesion.recurso.modulo.nombre,
                 'curso': sesion.recurso.modulo.curso.nombre,
-                'porcentaje_atencion': sesion.porcentaje_atencion,
-                'segundos_distraido': sesion.segundos_distraido,
-                'duracion_total': sesion.duracion_total,
-                'fecha': sesion.fecha_creacion.strftime('%Y-%m-%d %H:%M')
+                'porcentaje_atencion': float(sesion.porcentaje_atencion),
+                'segundos_distraido': int(sesion.segundos_distraido),
+                'duracion_total': int(sesion.duracion_total),
+                'fecha': sesion.fecha.strftime('%Y-%m-%d %H:%M')
             })
 
     return resultado
+
 
 def obtener_estadisticas_atencion(sesiones):
     """Calcula estadísticas agregadas de las sesiones"""

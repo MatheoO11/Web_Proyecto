@@ -154,63 +154,14 @@ class DetalleFilaD2RInline(admin.TabularInline):
 
 @admin.register(ResultadoD2R)
 class ResultadoD2RAdmin(admin.ModelAdmin):
-    """
-    Admin para ver resultados del test D2-R de atención y concentración.
-    """
+    list_display = ("id", "estudiante", "curso", "recurso", "fecha", "con")  # ajusta a tus campos
+    list_filter = ("fecha", "curso", "recurso")
+    search_fields = ("estudiante__email", "estudiante__username")
 
-    list_display = [
-        'id',
-        'estudiante',
-        'curso',
-        'con',
-        'var',
-        'tot',
-        'fecha'
-    ]
+    def has_add_permission(self, request):
+        # No permitir crear manualmente desde el admin
+        return False
 
-    list_filter = [
-        'fecha',
-        'curso',
-        'estudiante'
-    ]
-
-    search_fields = [
-        'estudiante__email',
-        'curso__titulo'
-    ]
-
-    readonly_fields = ['fecha']
-
-    fieldsets = (
-        ('👤 Información General', {
-            'fields': ('estudiante', 'curso', 'recurso', 'fecha')
-        }),
-        ('📊 Variables Psicométricas', {
-            'fields': (
-                'tr_total',
-                'ta_total',
-                'eo_total',
-                'ec_total'
-            )
-        }),
-        ('📈 Índices Calculados', {
-            'fields': (
-                'tot',
-                'con',
-                'var'
-            )
-        }),
-        ('📝 Interpretación', {
-            'fields': ('interpretacion',),
-            'classes': ('collapse',)
-        })
-    )
-
-    inlines = [DetalleFilaD2RInline]
-
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        return qs.select_related('estudiante', 'curso', 'recurso')
 
 
 # Configuración del sitio admin

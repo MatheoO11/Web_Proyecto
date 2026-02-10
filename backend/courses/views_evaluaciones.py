@@ -34,8 +34,9 @@ except ImportError:
 # ====================================================================
 
 def calcular_nivel_atencion(user):
-    from analytics.models import AtencionSesion
-    sesiones = AtencionSesion.objects.filter(user=user).order_by("-fecha_creacion")[:5]
+    from evaluaciones.models import SesionAtencion
+
+    sesiones = SesionAtencion.objects.filter(estudiante=user).order_by("-fecha")[:5]
 
     if not sesiones:
         return "media", 50.0
@@ -50,6 +51,7 @@ def calcular_nivel_atencion(user):
         nivel = "baja"
 
     return nivel, round(float(promedio), 2)
+
 
 
 def obtener_contexto_d2r(user):
@@ -375,8 +377,9 @@ def generar_evaluacion_adaptativa(request):
         if recurso_id:
             recurso = Recurso.objects.get(id=recurso_id)
         else:
-            from analytics.models import AtencionSesion
-            ultima = AtencionSesion.objects.filter(user=user).order_by("-fecha_creacion").first()
+            from evaluaciones.models import SesionAtencion
+            ultima = SesionAtencion.objects.filter(estudiante=user).order_by("-fecha").first()
+
             if ultima and ultima.recurso:
                 recurso = ultima.recurso
             else:
