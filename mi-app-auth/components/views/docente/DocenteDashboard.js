@@ -46,7 +46,7 @@ export default function DocenteDashboard() {
         };
 
         // 1. Obtener Cursos del Docente
-        const dataCursos = await safeFetch('/cursos/');
+        const dataCursos = await safeFetch('/api/cursos/');
         setCursos(dataCursos);
 
         // 2. Identificar qué estudiantes están inscritos en mis cursos
@@ -60,15 +60,15 @@ export default function DocenteDashboard() {
         }
 
         // 3. Obtener Usuarios (Estudiantes)
-        const allStudents = await safeFetch('/users/?rol=estudiante');
+        const allStudents = await safeFetch('/api/users/?rol=estudiante');
         // Filtramos solo mis alumnos
         const myStudents = allStudents.filter(s => studentIds.has(s.id));
 
         // 4. Obtener Resultados del Test D2-R (Capacidad)
-        const dataD2R = await safeFetch('/resultados-d2r/');
+        const dataD2R = await safeFetch('/api/evaluaciones/resultados-d2r/');
 
         // 5. Obtener Sesiones de Atención (Comportamiento en Video)
-        const dataAtencion = await safeFetch('/atencion/');
+        const dataAtencion = await safeFetch('/api/evaluaciones/atencion/');
 
         // 6. PROCESAMIENTO INTELIGENTE (Cruzar todo)
         const estudiantesProcesados = myStudents.map(est => {
@@ -152,7 +152,7 @@ export default function DocenteDashboard() {
   const saveVideoUrl = async () => {
     if (!editingRecurso || !token) return;
     try {
-      const res = await fetch(`${API_URL}/recursos/${editingRecurso.id}/`, {
+      const res = await fetch(`${API_URL}/api/recursos/${editingRecurso.id}/`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

@@ -11,6 +11,8 @@ from django.db.models import Max
 import json
 import traceback
 import random
+import threading
+import time
 
 from .models import (
     Recurso,
@@ -20,13 +22,20 @@ from .models import (
     EvolucionEstudiante,
 )
 
-# Importar Google Gemini (lib vieja; si falla, usamos fallback)
+# Importar Google Gemini (API oficial nueva)
 try:
-    import google.generativeai as genai
-    GEMINI_DISPONIBLE = True
-except ImportError:
+    from google import genai
+    api_key = getattr(settings, "GEMINI_API_KEY", None) or getattr(settings, "GOOGLE_API_KEY", None)
+    client = genai.Client(api_key=api_key) if api_key else None
+    GEMINI_DISPONIBLE = bool(client)
+    if GEMINI_DISPONIBLE:
+        print(f"[OK] Gemini disponible (views_evaluaciones)")
+    else:
+        print("[WARNING] No API key found for Gemini (views_evaluaciones)")
+except Exception:
     GEMINI_DISPONIBLE = False
-    print("⚠️ WARNING: google.generativeai no está instalado")
+    client = None
+    print("[WARNING]: google-genai no está disponible")
 
 
 # ====================================================================
@@ -91,13 +100,36 @@ def _extraer_json_de_texto(texto: str) -> str | None:
 
     t = _strip_code_fences(texto).strip()
 
-    if t.startswith("{") and t.endswith("}"):
+    # Intenta parsear directamente
+    try:
+        json.loads(t)
         return t
+    except ValueError:
+        pass
 
-    i = t.find("{")
-    j = t.rfind("}")
-    if i != -1 and j != -1 and j > i:
-        return t[i:j + 1]
+    # Buscar [...]
+    i_list = t.find("[")
+    j_list = t.rfind("]")
+    
+    if i_list != -1 and j_list != -1 and j_list > i_list:
+        candidate = t[i_list:j_list + 1]
+        try:
+            json.loads(candidate)
+            return candidate
+        except ValueError:
+            pass
+
+    # Buscar {...}
+    i_obj = t.find("{")
+    j_obj = t.rfind("}")
+    
+    if i_obj != -1 and j_obj != -1 and j_obj > i_obj:
+        candidate = t[i_obj:j_obj + 1]
+        try:
+            json.loads(candidate)
+            return candidate
+        except ValueError:
+            pass
 
     return None
 
@@ -212,40 +244,78 @@ def generar_preguntas_fallback(recurso, dificultad, num_preguntas):
     return preguntas, "Evaluación generada automáticamente (modo sin IA)."
 
 
-def generar_preguntas_ia(recurso, dificultad, num_preguntas):
+def generar_preguntas_ia(recurso, dificultad, num_preguntas, contexto_atencion=None, contexto_d2r=None):
     """
     Genera preguntas usando Gemini (modelo disponible en tu cuenta).
     Reintenta 2 veces antes de fallback.
+    Ahora incluye contexto del estudiante para personalización.
     """
-    if not GEMINI_DISPONIBLE:
+    if not GEMINI_DISPONIBLE or not client:
+        print("[INFO] Gemini no disponible, usando fallback")
         return generar_preguntas_fallback(recurso, dificultad, num_preguntas)
 
-    api_key = getattr(settings, "GOOGLE_API_KEY", None)
-    if not api_key:
-        print("⚠️ GOOGLE_API_KEY vacía: usando fallback")
-        return generar_preguntas_fallback(recurso, dificultad, num_preguntas)
+    # Preparar contexto del estudiante para el prompt
+    contexto_atencion = contexto_atencion or {}
+    contexto_d2r = contexto_d2r or {}
+    
+    nivel_atencion = contexto_atencion.get("nivel", "desconocido")
+    promedio_atencion = float(contexto_atencion.get("promedio", 0))
+    
+    con_d2r = contexto_d2r.get("con", "N/A")
+    var_d2r = contexto_d2r.get("var", "N/A")
+    
+    # Construir contexto textual
+    contexto_estudiante = f"""
+PERFIL DEL ESTUDIANTE:
+- Nivel de Atención en Videos: {nivel_atencion} ({promedio_atencion}% promedio)
+- Capacidad de Concentración (Test D2R): {con_d2r}
+- Variabilidad de Concentración: {var_d2r}
+"""
 
-    genai.configure(api_key=api_key)
-
-    # ✅ MODELO CORRECTO segun tu list_models()
-    model = genai.GenerativeModel("models/gemini-2.5-flash")
+    # Instrucciones adaptativas según el perfil
+    instrucciones_adaptativas = ""
+    if nivel_atencion == "baja" or promedio_atencion < 50:
+        instrucciones_adaptativas = """
+ADAPTACIÓN PARA BAJA ATENCIÓN:
+- Usa preguntas claras, cortas y directas
+- Evita enunciados largos o complejos
+- Conceptos fundamentales, no detalles rebuscados
+"""
+    elif nivel_atencion == "alta" and promedio_atencion >= 75:
+        instrucciones_adaptativas = """
+ADAPTACIÓN PARA ALTA ATENCIÓN:
+- Puedes incluir preguntas de análisis más profundo
+- Casos prácticos o aplicación de conceptos
+- Combinación de ideas, no solo definiciones
+"""
+    else:
+        instrucciones_adaptativas = """
+ADAPTACIÓN PARA ATENCIÓN MEDIA:
+- Balance entre claridad y profundidad
+- Mezcla de conceptos teóricos y aplicación práctica
+"""
 
     prompt = f"""
-Eres un profesor experto.
+Eres un profesor experto que personaliza evaluaciones según el rendimiento del estudiante.
 
-Genera EXACTAMENTE {num_preguntas} preguntas DIFERENTES (no repitas).
-Tema: {recurso.titulo}
-Dificultad: {dificultad}
+TEMA: {recurso.titulo}
+DIFICULTAD: {dificultad}
+CANTIDAD: Genera EXACTAMENTE {num_preguntas} preguntas DIFERENTES (no repitas).
 
-REGLAS:
-- Cada pregunta debe ser única.
-- 4 opciones por pregunta.
-- "correcta" SOLO una letra: "A", "B", "C" o "D".
-- En "opciones" NO pongas "A) ..." ni "B) ...". Solo el texto.
+{contexto_estudiante}
+
+{instrucciones_adaptativas}
+
+REGLAS GENERALES:
+- Cada pregunta debe ser única y relevante al tema
+- 4 opciones por pregunta
+- "correcta" SOLO una letra: "A", "B", "C" o "D"
+- En "opciones" NO pongas "A) ..." ni "B) ...". Solo el texto
+- Adapta el lenguaje y complejidad según el perfil del estudiante
 
 Devuelve SOLO JSON válido, sin markdown, sin texto adicional:
 {{
-  "mensaje": "Mensaje motivador breve",
+  "mensaje": "Mensaje motivador personalizado basado en el contexto del estudiante",
   "preguntas": [
     {{
       "pregunta": "Texto de pregunta",
@@ -256,23 +326,61 @@ Devuelve SOLO JSON válido, sin markdown, sin texto adicional:
 }}
 """
 
+
     for intento in range(1, 3):
         try:
-            response = model.generate_content(prompt)
+            print(f"[GEMINI] Intento {intento}: Iniciando llamada a Gemini...")
+            inicio = time.time()
 
-            texto_raw = (getattr(response, "text", "") or "").strip()
+            # Llamada con timeout de 30 segundos usando threading
+            resultado = [None]
+            error_hilo = [None]
+
+            def _llamar_gemini():
+                try:
+                    resultado[0] = client.models.generate_content(
+                        model="gemini-2.5-flash",
+                        contents=prompt
+                    )
+                except Exception as ex:
+                    error_hilo[0] = ex
+
+            hilo = threading.Thread(target=_llamar_gemini)
+            hilo.start()
+            hilo.join(timeout=30)  # Máximo 30 segundos
+
+            if hilo.is_alive():
+                print(f"[GEMINI] Intento {intento}: TIMEOUT - Gemini no respondió en 30 segundos")
+                continue
+
+            if error_hilo[0]:
+                raise error_hilo[0]
+
+            response = resultado[0]
+            duracion = round(time.time() - inicio, 2)
+            print(f"[GEMINI] Respuesta recibida de Gemini ({duracion}s)")
+
+            texto_raw = (response.text or "").strip()
+            print(f"[GEMINI] Contenido respuesta: {texto_raw[:200]}")
+
             json_txt = _extraer_json_de_texto(texto_raw)
 
             if not json_txt:
-                print(f"❌ Gemini intento {intento}: no devolvió JSON. Preview:", texto_raw[:180])
+                print(f"[GEMINI] Intento {intento}: no devolvio JSON valido. Preview: {texto_raw[:180]}")
                 continue
 
-            data = json.loads(json_txt)
+            try:
+                data = json.loads(json_txt)
+            except json.JSONDecodeError as je:
+                print(f"[GEMINI] Intento {intento}: ERROR parsing JSON: {je}")
+                print(f"[GEMINI] JSON texto: {json_txt[:300]}")
+                continue
+
             preguntas = data.get("preguntas", [])
             mensaje = (data.get("mensaje", "") or "").strip()
 
             if not isinstance(preguntas, list) or len(preguntas) != int(num_preguntas):
-                print(f"❌ Gemini intento {intento}: cantidad incorrecta de preguntas.")
+                print(f"[GEMINI] Intento {intento}: cantidad incorrecta ({len(preguntas) if isinstance(preguntas, list) else 'N/A'} vs {num_preguntas} esperadas)")
                 continue
 
             letras_validas = {"A", "B", "C", "D"}
@@ -304,20 +412,25 @@ Devuelve SOLO JSON válido, sin markdown, sin texto adicional:
                 textos.append(pregunta)
 
             if len(preguntas_ok) != int(num_preguntas):
-                print(f"❌ Gemini intento {intento}: estructura inválida.")
+                print(f"[GEMINI] Intento {intento}: estructura invalida ({len(preguntas_ok)} validas de {num_preguntas})")
                 continue
 
             if len(set(textos)) != len(textos):
-                print(f"❌ Gemini intento {intento}: preguntas repetidas.")
+                print(f"[GEMINI] Intento {intento}: preguntas repetidas")
                 continue
 
-            # ✅ listo
-            return preguntas_ok, (mensaje or "Evaluación generada por IA.")
+            # Éxito
+            mensaje_final = mensaje or "Evaluacion generada."
+            if "(Sin IA)" not in mensaje_final and "(sin IA)" not in mensaje_final:
+                mensaje_final = f"{mensaje_final} (Generada con IA - Gemini)"
+            print(f"[GEMINI] EXITO: {len(preguntas_ok)} preguntas generadas en {duracion}s")
+            return preguntas_ok, mensaje_final
 
         except Exception as e:
-            print(f"❌ ERROR Gemini intento {intento}: {str(e)}")
+            print(f"[GEMINI] ERROR intento {intento}: {str(e)}")
             traceback.print_exc()
 
+    print("[GEMINI] Todos los intentos fallaron, usando fallback")
     return generar_preguntas_fallback(recurso, dificultad, num_preguntas)
 
 
@@ -330,24 +443,47 @@ def _intento_siguiente(user, evaluacion) -> int:
     return int(max_intento or 0) + 1
 
 
-def generar_recursos_recomendados_bd(estudiante, recurso, nivel_atencion):
+def generar_recursos_recomendados_fallback(estudiante, recurso, nivel_atencion):
+    """
+    Fallback: genera enlaces de búsqueda específicos en YouTube y Google.
+    """
     if nivel_atencion == "baja":
-        cantidad = 8
-    elif nivel_atencion == "media":
         cantidad = 5
-    else:
+    elif nivel_atencion == "media":
         cantidad = 3
+    else:
+        cantidad = 2
 
     lista_front = []
+    tema = recurso.titulo
+    
+    # Recursos con tipo y búsqueda diferenciada
+    busquedas = [
+        {"texto": f"Tutorial {tema}", "tipo": "video"},
+        {"texto": f"Ejemplos practicos {tema}", "tipo": "video"},
+        {"texto": f"Guia completa {tema}", "tipo": "articulo"},
+        {"texto": f"Errores comunes en {tema}", "tipo": "video"},
+        {"texto": f"Conceptos clave {tema}", "tipo": "articulo"},
+    ]
+
     for i in range(cantidad):
+        item = busquedas[i % len(busquedas)]
+        query = item["texto"].replace(' ', '+')
+        
+        if item["tipo"] == "video":
+            url_busqueda = f"https://www.youtube.com/results?search_query={query}"
+        else:
+            url_busqueda = f"https://www.google.com/search?q={query}"
+        
         rec_bd = RecursoRecomendado.objects.create(
             estudiante=estudiante,
-            titulo=f"Refuerzo: {recurso.titulo} - Parte {i+1}",
-            descripcion="Material de apoyo generado por tu resultado en la evaluación.",
-            tipo="video",
-            prioridad="alta" if i < 3 else "media",
+            titulo=f"Investigar: {item['texto']}",
+            descripcion=f"Recurso de refuerzo sugerido sobre '{tema}'.",
+            tipo=item["tipo"],
+            prioridad="alta" if i < 2 else "media",
             recurso_original=recurso,
-            url="https://youtube.com",
+            url=url_busqueda,
+            razon_recomendacion="Recomendacion automatica por sistema de respaldo."
         )
 
         lista_front.append({
@@ -357,9 +493,122 @@ def generar_recursos_recomendados_bd(estudiante, recurso, nivel_atencion):
             "descripcion": rec_bd.descripcion,
             "prioridad": rec_bd.prioridad,
             "url": getattr(rec_bd, "url", None),
+            "razon": rec_bd.razon_recomendacion
         })
 
     return lista_front
+
+
+def generar_recursos_recomendados_ia(estudiante, recurso, nivel_atencion, puntaje_eval=0):
+    """
+    Genera recomendaciones reales usando Gemini con JSON estricto.
+    """
+    if not GEMINI_DISPONIBLE or not client:
+        return generar_recursos_recomendados_fallback(estudiante, recurso, nivel_atencion)
+
+    tema = recurso.titulo
+    # Contexto para el prompt
+    prompt = f"""
+Eres un tutor experto. El estudiante acaba de finalizar una evaluación sobre: "{tema}".
+
+CONTEXTO:
+- Nivel de atención detectado: {nivel_atencion}
+- Puntaje en evaluación: {puntaje_eval}%
+
+TAREA:
+Genera una lista de 5 recursos recomendados para reforzar el tema "{tema}".
+
+REGLAS PARA URLs:
+- Para videos: usa URLs de búsqueda en YouTube con el formato EXACTO:
+  https://www.youtube.com/results?search_query=PALABRA+CLAVE+DEL+TEMA
+  Ejemplo: https://www.youtube.com/results?search_query=introduccion+SQL+bases+datos
+- Para artículos: usa URLs de búsqueda en Google:
+  https://www.google.com/search?q=PALABRA+CLAVE+DEL+TEMA
+- NUNCA uses "https://youtube.com" ni "https://www.youtube.com" sin parámetros
+- Reemplaza espacios por + en los parámetros de búsqueda
+
+FORMATO DE RESPUESTA - SOLO JSON válido, sin markdown:
+[
+  {{
+    "titulo": "Titulo descriptivo del recurso",
+    "descripcion": "Breve explicacion de por que ayuda",
+    "tipo": "video",
+    "prioridad": "alta",
+    "url": "https://www.youtube.com/results?search_query=tema+especifico",
+    "razon": "Explicacion pedagogica"
+  }}
+]
+
+Genera al menos 3 videos de YouTube y 2 articulos. Responde SOLO con el JSON.
+""".strip()
+
+    for intento in range(1, 3):
+        try:
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt
+            )
+            
+            texto = (response.text or "").strip()
+            json_txt = _extraer_json_de_texto(texto)
+            
+            if not json_txt:
+                print(f"[WARNING] Gemini recomendaciones intento {intento}: No JSON")
+                continue
+                
+            data = json.loads(json_txt)
+            
+            if not isinstance(data, list) or len(data) == 0:
+                print(f"[WARNING] Gemini recomendaciones intento {intento}: Lista vacía o formato incorrecto")
+                continue
+
+            # Crear objetos
+            lista_front = []
+            for item in data[:8]: # Max 8
+                titulo = item.get("titulo", "Recurso recomendado")[:199]
+                url = item.get("url", "")
+                
+                # Validar que no sea solo el home de YouTube
+                url_limpia = url.strip().replace("https://", "").replace("http://", "").replace("www.", "").rstrip("/")
+                es_home_youtube = url_limpia in ("youtube.com", "youtube.com/", "")
+                es_home_google = url_limpia in ("google.com", "google.com/", "")
+                
+                if not url or es_home_youtube or es_home_google:
+                    tipo_item = item.get("tipo", "articulo")
+                    query = titulo.replace(' ', '+')
+                    if tipo_item == "video":
+                        url = f"https://www.youtube.com/results?search_query={query}"
+                    else:
+                        url = f"https://www.google.com/search?q={query}"
+
+                rec_bd = RecursoRecomendado.objects.create(
+                    estudiante=estudiante,
+                    titulo=titulo,
+                    descripcion=item.get("descripcion", "")[:500],
+                    tipo=item.get("tipo", "articulo")[:20],
+                    prioridad=item.get("prioridad", "media")[:10],
+                    recurso_original=recurso,
+                    url=url,
+                    razon_recomendacion=item.get("razon", "")[:500]
+                )
+                
+                lista_front.append({
+                    "id": rec_bd.id,
+                    "titulo": rec_bd.titulo,
+                    "tipo": rec_bd.tipo,
+                    "descripcion": rec_bd.descripcion,
+                    "prioridad": rec_bd.prioridad,
+                    "url": rec_bd.url,
+                    "razon": rec_bd.razon_recomendacion
+                })
+            
+            return lista_front
+
+        except Exception as e:
+            print(f"[ERROR] Error Gemini recomendaciones intento {intento}: {str(e)}")
+            traceback.print_exc()
+
+    return generar_recursos_recomendados_fallback(estudiante, recurso, nivel_atencion)
 
 
 # ====================================================================
@@ -369,25 +618,35 @@ def generar_recursos_recomendados_bd(estudiante, recurso, nivel_atencion):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def generar_evaluacion_adaptativa(request):
+    print("=" * 60)
+    print(">>> ENDPOINT generar_evaluacion_adaptativa LLAMADO <<<")
+    print("=" * 60)
     user = request.user
     recurso_id = request.data.get("recurso_id")
+    print(f">>> Usuario: {user}, recurso_id: {recurso_id}")
 
     try:
         if recurso_id:
             recurso = Recurso.objects.get(id=recurso_id)
+            print(f">>> Recurso encontrado por ID: {recurso.titulo}")
         else:
             from evaluaciones.models import SesionAtencion
             ultima = SesionAtencion.objects.filter(estudiante=user).order_by("-fecha").first()
 
             if ultima and ultima.recurso:
                 recurso = ultima.recurso
+                print(f">>> Recurso encontrado por sesion: {recurso.titulo}")
             else:
                 recurso = Recurso.objects.first()
+                print(f">>> Recurso por defecto: {recurso}")
 
         if not recurso:
+            print(">>> ERROR: No hay recursos disponibles")
             return Response({"error": "No hay recursos disponibles"}, status=status.HTTP_404_NOT_FOUND)
 
+        print(f">>> Calculando nivel de atencion...")
         nivel_atencion, promedio_atencion = calcular_nivel_atencion(user)
+        print(f">>> Nivel: {nivel_atencion}, promedio: {promedio_atencion}")
 
         if nivel_atencion == "baja":
             dificultad = "Difícil"
@@ -399,13 +658,29 @@ def generar_evaluacion_adaptativa(request):
             dificultad = "Fácil"
             num_preguntas = 5
 
-        preguntas_json, mensaje_ia = generar_preguntas_ia(recurso, dificultad, num_preguntas)
+        print(f">>> Dificultad: {dificultad}, num_preguntas: {num_preguntas}")
+
+        # Obtener contexto D2R antes de generar preguntas
+        print(">>> Obteniendo contexto D2R...")
+        contexto_d2r = obtener_contexto_d2r(user)
+        print(f">>> Contexto D2R: {contexto_d2r}")
+        
+        # Pasar contexto a la IA para personalización
+        print(">>> A PUNTO DE LLAMAR A GENERAR_PREGUNTAS_IA <<<")
+        preguntas_json, mensaje_ia = generar_preguntas_ia(
+            recurso, 
+            dificultad, 
+            num_preguntas,
+            contexto_atencion={"nivel": nivel_atencion, "promedio": promedio_atencion},
+            contexto_d2r=contexto_d2r
+        )
+        print(f">>> generar_preguntas_ia RETORNO: {len(preguntas_json) if preguntas_json else 0} preguntas")
+        print(f">>> Mensaje IA: {mensaje_ia}")
 
         if not preguntas_json:
             return Response({"error": "No se pudieron generar preguntas"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        contexto_d2r = obtener_contexto_d2r(user)
-        contexto_atencion = {
+        contexto_atencion_db = {
             "nivel": nivel_atencion,
             "promedio": promedio_atencion,
             "mensaje": mensaje_ia,
@@ -417,8 +692,12 @@ def generar_evaluacion_adaptativa(request):
             preguntas_json=preguntas_json,
             generada_para=user,
             contexto_d2r=contexto_d2r,
-            contexto_atencion=contexto_atencion,
+            contexto_atencion=contexto_atencion_db,
         )
+
+        # Determinar si se usó IA basado en el mensaje
+        modo_ia = "(Sin IA)" not in mensaje_ia and "(sin IA)" not in mensaje_ia
+        print(f">>> EVALUACION CREADA: id={evaluacion.id}, modo_ia={modo_ia}")
 
         return Response({
             "success": True,
@@ -428,13 +707,16 @@ def generar_evaluacion_adaptativa(request):
                 "total_preguntas": len(evaluacion.preguntas_json or []),
                 "preguntas": evaluacion.preguntas_json,
                 "contexto_atencion": evaluacion.contexto_atencion,
+                "modo_ia": modo_ia,  # Flag para frontend
                 "recurso": {"id": recurso.id, "titulo": recurso.titulo, "tipo": recurso.tipo},
             },
         })
 
     except Recurso.DoesNotExist:
+        print(">>> EXCEPTION: Recurso no encontrado")
         return Response({"error": "Recurso no encontrado"}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
+        print(f">>> EXCEPTION GENERAL: {str(e)}")
         traceback.print_exc()
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -488,7 +770,7 @@ def enviar_respuestas_evaluacion(request):
 
         recursos_rec = []
         if not aprobado:
-            recursos_rec = generar_recursos_recomendados_bd(user, evaluacion.recurso, nivel_atencion)
+            recursos_rec = generar_recursos_recomendados_ia(user, evaluacion.recurso, nivel_atencion, porcentaje)
 
         return Response({
             "success": True,

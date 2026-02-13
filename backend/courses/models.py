@@ -175,6 +175,7 @@ class RecursoRecomendado(models.Model):
     generado_por_ia = models.BooleanField(default=True)
     fecha_recomendacion = models.DateTimeField(auto_now_add=True)
     visto = models.BooleanField(default=False, help_text="Estudiante marcó como visto")
+    razon_recomendacion = models.TextField(blank=True, null=True, help_text="Explicación de por qué se recomendó")
 
     class Meta:
         ordering = ['-prioridad', '-fecha_recommendacion'] if hasattr(models, 'fecha_recommendacion') else ['-prioridad'] # Pequeño fix por si acaso

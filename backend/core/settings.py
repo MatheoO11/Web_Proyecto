@@ -160,7 +160,16 @@ if FRONTEND_URL and FRONTEND_URL not in CORS_ALLOWED_ORIGINS:
 # 2. CREDENTIALS (Importante para sesiones persistentes)
 CORS_ALLOW_CREDENTIALS = True
 
-CSRF_TRUSTED_ORIGINS = os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if os.getenv("CSRF_TRUSTED_ORIGINS") else []
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://web-proyecto-six.vercel.app",
+]
+
+# Agregar origenes adicionales desde env
+_extra_origins = os.getenv("CSRF_TRUSTED_ORIGINS", "")
+if _extra_origins:
+    CSRF_TRUSTED_ORIGINS += [o.strip() for o in _extra_origins.split(",") if o.strip()]
 
 
 # 3. HEADERS PERMITIDOS (¡ESTO ES LO QUE TE FALTABA!)
@@ -183,6 +192,7 @@ REST_FRAMEWORK = {
 
 # API KEY DE GOOGLE (bien por env)
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 USE_X_FORWARDED_HOST = True

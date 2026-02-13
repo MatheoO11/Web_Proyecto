@@ -31,7 +31,7 @@ export default function EvaluacionAdaptativa({ recursoId = null, onClose }) {
     setError(null);
 
     try {
-      const res = await fetch(`${API_URL}/api/generar-evaluacion/`, {
+      const res = await fetch(`${API_URL}/api/courses/generar-evaluacion/`, {
         method: 'POST',
         headers: {
           Authorization: `Token ${token}`,
@@ -84,7 +84,7 @@ export default function EvaluacionAdaptativa({ recursoId = null, onClose }) {
     const respuestasArray = preguntas.map((_, index) => respuestas[index]);
 
     try {
-      const res = await fetch(`${API_URL}/api/enviar-respuestas/`, {
+      const res = await fetch(`${API_URL}/api/courses/enviar-respuestas/`, {
         method: 'POST',
         headers: {
           Authorization: `Token ${token}`,

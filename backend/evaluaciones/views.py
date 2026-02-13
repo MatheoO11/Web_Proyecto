@@ -16,9 +16,13 @@ from .serializers import ResultadoD2RSerializer, SesionAtencionSerializer
 # ======================================================
 try:
     from google import genai
-    api_key = getattr(settings, "GOOGLE_API_KEY", None)
+    api_key = getattr(settings, "GEMINI_API_KEY", None) or getattr(settings, "GOOGLE_API_KEY", None)
     client = genai.Client(api_key=api_key) if api_key else None
     GEMINI_DISPONIBLE = bool(client)
+    if GEMINI_DISPONIBLE:
+        print(f"[OK] Gemini disponible (evaluaciones/views)")
+    else:
+        print("[WARNING] No API key found for Gemini (evaluaciones/views)")
 except Exception:
     GEMINI_DISPONIBLE = False
     client = None

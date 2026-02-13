@@ -12,12 +12,13 @@ from .models import Curso, Modulo, Recurso
 from .serializers import CursoSerializer, ModuloSerializer, RecursoSerializer
 
 # Importamos Google Gemini
+# Importar Google Gemini (API oficial)
 try:
-    import google.generativeai as genai
+    from google import genai
     GEMINI_DISPONIBLE = True
 except ImportError:
     GEMINI_DISPONIBLE = False
-    print("⚠️ WARNING: google.generativeai no está instalado")
+    print("[INFO] library google-genai not found (using fallback)")
 
 class CursoViewSet(viewsets.ModelViewSet):
     serializer_class = CursoSerializer
@@ -204,19 +205,18 @@ def generar_recomendaciones_ia(user, d2r_data, sesiones, estadisticas, patron):
 
     # Verificar si Gemini está disponible
     if not GEMINI_DISPONIBLE:
-        print("⚠️ Gemini no disponible, usando fallback")
+        print("[INFO] Fallback: Gemini no disponible en views.py")
         return generar_recomendaciones_fallback(sesiones, patron)
 
-    # Configurar Gemini
-    api_key = settings.GOOGLE_API_KEY
-    if not api_key or api_key == "":
-        print("⚠️ API Key vacía, usando fallback")
+    # Configurar Gemini client
+    api_key = getattr(settings, "GEMINI_API_KEY", None) or getattr(settings, "GOOGLE_API_KEY", None)
+    if not api_key:
+        print("[INFO] Fallback: API Key vacía")
         return generar_recomendaciones_fallback(sesiones, patron)
 
     try:
-        genai.configure(api_key=api_key)
-        # ✅ CORREGIDO: Usar gemini-pro en lugar de gemini-1.5-flash
-        model = genai.GenerativeModel('gemini-pro')
+        # Usar cliente instanciado globalmente o crear uno nuevo
+        client = genai.Client(api_key=api_key)
 
         # Preparar datos para el prompt
         videos_problema = [
@@ -282,9 +282,12 @@ Responde SOLO con el JSON, sin markdown, sin explicaciones adicionales:
 }}
 """
 
-        # Llamar a Gemini
-        print("🤖 Llamando a Gemini AI...")
-        response = model.generate_content(prompt)
+        # Llamar a Gemini (Nueva sintaxis)
+        print("🤖 Llamando a Gemini AI (views.py)...")
+        response = client.models.generate_content(
+            model="gemini-2.5-flash", 
+            contents=prompt
+        )
         texto_respuesta = response.text.strip()
 
         # Limpiar posibles markdown
@@ -300,10 +303,10 @@ Responde SOLO con el JSON, sin markdown, sin explicaciones adicionales:
         return resultado
 
     except json.JSONDecodeError as e:
-        print(f"❌ Error: Gemini no retornó JSON válido - {str(e)}")
+        print(f"[ERROR] Gemini no retornó JSON válido - {str(e)}")
         return generar_recomendaciones_fallback(sesiones, patron)
     except Exception as e:
-        print(f"❌ Error en Gemini AI: {str(e)}")
+        print(f"[ERROR] Error en Gemini AI: {str(e)}")
         return generar_recomendaciones_fallback(sesiones, patron)
 
 def generar_recomendaciones_fallback(sesiones, patron):

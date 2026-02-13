@@ -40,6 +40,9 @@ class CustomAuthToken(ObtainAuthToken):
         })
 
 # ✅ 2. VIEWSET DE USUARIOS (Sin cambios)
+from django.db.models import Q
+
+# ✅ 2. VIEWSET DE USUARIOS (Sin cambios)
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
@@ -47,9 +50,26 @@ class UserViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
+        queryset = User.objects.all()
+
+        # Si es Admin, ve todo
         if user.is_staff or getattr(user, 'rol', '') == 'admin':
-            return User.objects.all()
-        return User.objects.filter(id=user.id)
+            pass
+            
+        # Si es Docente, ve a sí mismo Y a los estudiantes
+        elif getattr(user, 'rol', '') == 'docente':
+            queryset = queryset.filter(Q(id=user.id) | Q(rol='estudiante'))
+            
+        # Si es Estudiante, solo se ve a sí mismo
+        else:
+            queryset = queryset.filter(id=user.id)
+
+        # Filtro por rol (opcional)
+        rol_param = self.request.query_params.get('rol')
+        if rol_param:
+            queryset = queryset.filter(rol=rol_param)
+
+        return queryset
 
 # ✅ 3. VISTA "ME" (Sin cambios)
 class UserMeView(APIView):
