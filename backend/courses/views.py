@@ -285,7 +285,7 @@ Responde SOLO con el JSON, sin markdown, sin explicaciones adicionales:
         # Llamar a Gemini (Nueva sintaxis)
         print("🤖 Llamando a Gemini AI (views.py)...")
         response = client.models.generate_content(
-            model="gemini-2.5-flash", 
+            model="gemini-2.0-flash", 
             contents=prompt
         )
         texto_respuesta = response.text.strip()

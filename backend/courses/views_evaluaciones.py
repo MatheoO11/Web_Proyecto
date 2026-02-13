@@ -326,31 +326,15 @@ Devuelve SOLO JSON válido, sin markdown, sin texto adicional:
             print(f"[GEMINI] Intento {intento}: Iniciando llamada a Gemini...")
             inicio = time.time()
 
-            # Llamada con timeout de 30 segundos usando threading
-            resultado = [None]
-            error_hilo = [None]
+            try:
+                response = client.models.generate_content(
+                    model="gemini-2.0-flash",
+                    contents=prompt
+                )
+            except Exception as ex:
+                print(f"[GEMINI] Error directo en la llamada de la API: {str(ex)}")
+                raise ex
 
-            def _llamar_gemini():
-                try:
-                    resultado[0] = client.models.generate_content(
-                        model="gemini-2.5-flash",
-                        contents=prompt
-                    )
-                except Exception as ex:
-                    error_hilo[0] = ex
-
-            hilo = threading.Thread(target=_llamar_gemini)
-            hilo.start()
-            hilo.join(timeout=30)
-
-            if hilo.is_alive():
-                print(f"[GEMINI] Intento {intento}: TIMEOUT - Gemini no respondió en 30 segundos")
-                continue
-
-            if error_hilo[0]:
-                raise error_hilo[0]
-
-            response = resultado[0]
             duracion = round(time.time() - inicio, 2)
             print(f"[GEMINI] Respuesta recibida de Gemini ({duracion}s)")
 

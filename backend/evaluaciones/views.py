@@ -79,7 +79,7 @@ Devuelve JSON válido:
 
         try:
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-2.0-flash",
                 contents=prompt
             )
             return Response({
@@ -144,7 +144,7 @@ Devuelve JSON:
 
         try:
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-2.0-flash",
                 contents=prompt
             )
             return Response({"ok": True, "raw": response.text})
@@ -234,7 +234,7 @@ Devuelve JSON:
 
         try:
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-2.0-flash",
                 contents=prompt
             )
             return Response({
