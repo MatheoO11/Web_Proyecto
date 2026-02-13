@@ -1,6 +1,5 @@
-# backend/courses/views_evaluaciones.py
 from __future__ import annotations
-from django.views.decorators.csrf import csrf_exempt
+
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -237,7 +236,7 @@ def generar_preguntas_fallback(recurso, dificultad, num_preguntas):
 
         preguntas.append({
             "pregunta": texto_pregunta,
-            "opciones": opciones,   # sin "A) " para que el frontend no duplique letras
+            "opciones": opciones,
             "correcta": letra_correcta,
         })
 
@@ -326,7 +325,6 @@ Devuelve SOLO JSON válido, sin markdown, sin texto adicional:
 }}
 """
 
-
     for intento in range(1, 3):
         try:
             print(f"[GEMINI] Intento {intento}: Iniciando llamada a Gemini...")
@@ -347,7 +345,7 @@ Devuelve SOLO JSON válido, sin markdown, sin texto adicional:
 
             hilo = threading.Thread(target=_llamar_gemini)
             hilo.start()
-            hilo.join(timeout=30)  # Máximo 30 segundos
+            hilo.join(timeout=30)
 
             if hilo.is_alive():
                 print(f"[GEMINI] Intento {intento}: TIMEOUT - Gemini no respondió en 30 segundos")
@@ -507,7 +505,6 @@ def generar_recursos_recomendados_ia(estudiante, recurso, nivel_atencion, puntaj
         return generar_recursos_recomendados_fallback(estudiante, recurso, nivel_atencion)
 
     tema = recurso.titulo
-    # Contexto para el prompt
     prompt = f"""
 Eres un tutor experto. El estudiante acaba de finalizar una evaluación sobre: "{tema}".
 
@@ -562,13 +559,11 @@ Genera al menos 3 videos de YouTube y 2 articulos. Responde SOLO con el JSON.
                 print(f"[WARNING] Gemini recomendaciones intento {intento}: Lista vacía o formato incorrecto")
                 continue
 
-            # Crear objetos
             lista_front = []
-            for item in data[:8]: # Max 8
+            for item in data[:8]:
                 titulo = item.get("titulo", "Recurso recomendado")[:199]
                 url = item.get("url", "")
 
-                # Validar que no sea solo el home de YouTube
                 url_limpia = url.strip().replace("https://", "").replace("http://", "").replace("www.", "").rstrip("/")
                 es_home_youtube = url_limpia in ("youtube.com", "youtube.com/", "")
                 es_home_google = url_limpia in ("google.com", "google.com/", "")
@@ -614,7 +609,7 @@ Genera al menos 3 videos de YouTube y 2 articulos. Responde SOLO con el JSON.
 # ====================================================================
 # ENDPOINT 1: GENERAR EVALUACIÓN ADAPTATIVA
 # ====================================================================
-from django.views.decorators.csrf import csrf_exempt
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def generar_evaluacion_adaptativa(request):
@@ -660,12 +655,10 @@ def generar_evaluacion_adaptativa(request):
 
         print(f">>> Dificultad: {dificultad}, num_preguntas: {num_preguntas}")
 
-        # Obtener contexto D2R antes de generar preguntas
         print(">>> Obteniendo contexto D2R...")
         contexto_d2r = obtener_contexto_d2r(user)
         print(f">>> Contexto D2R: {contexto_d2r}")
 
-        # Pasar contexto a la IA para personalización
         print(">>> A PUNTO DE LLAMAR A GENERAR_PREGUNTAS_IA <<<")
         preguntas_json, mensaje_ia = generar_preguntas_ia(
             recurso,
@@ -695,7 +688,6 @@ def generar_evaluacion_adaptativa(request):
             contexto_atencion=contexto_atencion_db,
         )
 
-        # Determinar si se usó IA basado en el mensaje
         modo_ia = "(Sin IA)" not in mensaje_ia and "(sin IA)" not in mensaje_ia
         print(f">>> EVALUACION CREADA: id={evaluacion.id}, modo_ia={modo_ia}")
 
@@ -707,7 +699,7 @@ def generar_evaluacion_adaptativa(request):
                 "total_preguntas": len(evaluacion.preguntas_json or []),
                 "preguntas": evaluacion.preguntas_json,
                 "contexto_atencion": evaluacion.contexto_atencion,
-                "modo_ia": modo_ia,  # Flag para frontend
+                "modo_ia": modo_ia,
                 "recurso": {"id": recurso.id, "titulo": recurso.titulo, "tipo": recurso.tipo},
             },
         })
@@ -724,7 +716,7 @@ def generar_evaluacion_adaptativa(request):
 # ====================================================================
 # ENDPOINT 2: ENVIAR RESPUESTAS
 # ====================================================================
-from django.views.decorators.csrf import csrf_exempt
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def enviar_respuestas_evaluacion(request):

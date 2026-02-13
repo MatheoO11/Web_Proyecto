@@ -5,31 +5,23 @@ Django settings for core project.
 from pathlib import Path
 import os
 
-# ✅ NUEVO: para Postgres en Railway (DATABASE_URL)
 import dj_database_url
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Intentar cargar variables de entorno si existe un archivo .env
 try:
     from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
     pass
 
-# SECURITY WARNING: keep the secret key used in production secret!
-# ✅ CAMBIO: usa env si existe (Railway), si no, usa la tuya local (no rompe local)
 SECRET_KEY = os.getenv(
     "SECRET_KEY",
     "django-insecure-ejfm5l40fce2pfb8*r#wj%$!e8kmy7sfg$2cx_o38(p0s^l+im"
 )
 
-# SECURITY WARNING: don't run with debug turned on in production!
-# ✅ CAMBIO: en Railway pon DEBUG=0; en local seguirá True si no defines nada
 DEBUG = os.getenv("DEBUG", "1") == "1"
 
-# ✅ CAMBIO: hosts para Railway + local
 ALLOWED_HOSTS = [
     "localhost",
     "127.0.0.1",
@@ -39,8 +31,6 @@ _extra_hosts = os.getenv("ALLOWED_HOSTS", "")
 if _extra_hosts:
     ALLOWED_HOSTS += [h.strip() for h in _extra_hosts.split(",") if h.strip()]
 
-# Application definition
-
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -49,15 +39,12 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 
-    # Librerías de terceros
     'rest_framework',
     'rest_framework.authtoken',
     'corsheaders',
 
-    # Extensiones
     'django_extensions',
 
-    # TUS APLICACIONES
     'users',
     'courses',
     'evaluaciones',
@@ -65,15 +52,12 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',  # ✅ Debe ir primero
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
-
-    # ✅ NUEVO: WhiteNoise para estáticos del admin en producción
     'whitenoise.middleware.WhiteNoiseMiddleware',
-
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
+    # 'django.middleware.csrf.CsrfViewMiddleware',  # DESHABILITADO PARA API CON TOKENS
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -98,8 +82,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'core.wsgi.application'
 
-
-# ✅ CAMBIO IMPORTANTE: SQLite en local, Postgres en Railway si existe DATABASE_URL
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 if DATABASE_URL:
     DATABASES = {
@@ -113,7 +95,6 @@ else:
         }
     }
 
-# Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
@@ -121,17 +102,12 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
-# Internationalization
-# ✅ No toco tu lógica, pero para Ecuador puedes cambiar si quieres
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 
-# Static files (CSS, JavaScript, Images)
 STATIC_URL = '/static/'
-
-# ✅ NUEVO: requerido para WhiteNoise en Railway
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STORAGES = {
     "staticfiles": {
@@ -139,14 +115,10 @@ STORAGES = {
     }
 }
 
-# Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
-# --- CONFIGURACIÓN PROPIA Y CORS (SOLUCIÓN PANTALLA BLANCA) ---
 
 AUTH_USER_MODEL = 'users.CustomUser'
 
-# ✅ CORS: mantengo lo tuyo y agrego opción para Vercel por env
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -157,7 +129,6 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "")
 if FRONTEND_URL and FRONTEND_URL not in CORS_ALLOWED_ORIGINS:
     CORS_ALLOWED_ORIGINS.append(FRONTEND_URL)
 
-# 2. CREDENTIALS (Importante para sesiones persistentes)
 CORS_ALLOW_CREDENTIALS = True
 
 CSRF_TRUSTED_ORIGINS = [
@@ -166,13 +137,10 @@ CSRF_TRUSTED_ORIGINS = [
     "https://web-proyecto-six.vercel.app",
 ]
 
-# Agregar origenes adicionales desde env
 _extra_origins = os.getenv("CSRF_TRUSTED_ORIGINS", "")
 if _extra_origins:
     CSRF_TRUSTED_ORIGINS += [o.strip() for o in _extra_origins.split(",") if o.strip()]
 
-
-# 3. HEADERS PERMITIDOS (¡ESTO ES LO QUE TE FALTABA!)
 from corsheaders.defaults import default_headers
 
 CORS_ALLOW_HEADERS = list(default_headers) + [
@@ -183,14 +151,13 @@ CORS_ALLOW_HEADERS = list(default_headers) + [
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.TokenAuthentication',
-        'rest_framework.authentication.SessionAuthentication',  # Útil para ver la API en navegador
+        'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',  # Por defecto todo privado
+        'rest_framework.permissions.IsAuthenticated',
     ],
 }
 
-# API KEY DE GOOGLE (bien por env)
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
