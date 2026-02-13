@@ -1,6 +1,6 @@
 # backend/courses/views_evaluaciones.py
 from __future__ import annotations
-
+from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -110,7 +110,7 @@ def _extraer_json_de_texto(texto: str) -> str | None:
     # Buscar [...]
     i_list = t.find("[")
     j_list = t.rfind("]")
-    
+
     if i_list != -1 and j_list != -1 and j_list > i_list:
         candidate = t[i_list:j_list + 1]
         try:
@@ -122,7 +122,7 @@ def _extraer_json_de_texto(texto: str) -> str | None:
     # Buscar {...}
     i_obj = t.find("{")
     j_obj = t.rfind("}")
-    
+
     if i_obj != -1 and j_obj != -1 and j_obj > i_obj:
         candidate = t[i_obj:j_obj + 1]
         try:
@@ -257,13 +257,13 @@ def generar_preguntas_ia(recurso, dificultad, num_preguntas, contexto_atencion=N
     # Preparar contexto del estudiante para el prompt
     contexto_atencion = contexto_atencion or {}
     contexto_d2r = contexto_d2r or {}
-    
+
     nivel_atencion = contexto_atencion.get("nivel", "desconocido")
     promedio_atencion = float(contexto_atencion.get("promedio", 0))
-    
+
     con_d2r = contexto_d2r.get("con", "N/A")
     var_d2r = contexto_d2r.get("var", "N/A")
-    
+
     # Construir contexto textual
     contexto_estudiante = f"""
 PERFIL DEL ESTUDIANTE:
@@ -456,7 +456,7 @@ def generar_recursos_recomendados_fallback(estudiante, recurso, nivel_atencion):
 
     lista_front = []
     tema = recurso.titulo
-    
+
     # Recursos con tipo y búsqueda diferenciada
     busquedas = [
         {"texto": f"Tutorial {tema}", "tipo": "video"},
@@ -469,12 +469,12 @@ def generar_recursos_recomendados_fallback(estudiante, recurso, nivel_atencion):
     for i in range(cantidad):
         item = busquedas[i % len(busquedas)]
         query = item["texto"].replace(' ', '+')
-        
+
         if item["tipo"] == "video":
             url_busqueda = f"https://www.youtube.com/results?search_query={query}"
         else:
             url_busqueda = f"https://www.google.com/search?q={query}"
-        
+
         rec_bd = RecursoRecomendado.objects.create(
             estudiante=estudiante,
             titulo=f"Investigar: {item['texto']}",
@@ -548,16 +548,16 @@ Genera al menos 3 videos de YouTube y 2 articulos. Responde SOLO con el JSON.
                 model="gemini-2.5-flash",
                 contents=prompt
             )
-            
+
             texto = (response.text or "").strip()
             json_txt = _extraer_json_de_texto(texto)
-            
+
             if not json_txt:
                 print(f"[WARNING] Gemini recomendaciones intento {intento}: No JSON")
                 continue
-                
+
             data = json.loads(json_txt)
-            
+
             if not isinstance(data, list) or len(data) == 0:
                 print(f"[WARNING] Gemini recomendaciones intento {intento}: Lista vacía o formato incorrecto")
                 continue
@@ -567,12 +567,12 @@ Genera al menos 3 videos de YouTube y 2 articulos. Responde SOLO con el JSON.
             for item in data[:8]: # Max 8
                 titulo = item.get("titulo", "Recurso recomendado")[:199]
                 url = item.get("url", "")
-                
+
                 # Validar que no sea solo el home de YouTube
                 url_limpia = url.strip().replace("https://", "").replace("http://", "").replace("www.", "").rstrip("/")
                 es_home_youtube = url_limpia in ("youtube.com", "youtube.com/", "")
                 es_home_google = url_limpia in ("google.com", "google.com/", "")
-                
+
                 if not url or es_home_youtube or es_home_google:
                     tipo_item = item.get("tipo", "articulo")
                     query = titulo.replace(' ', '+')
@@ -591,7 +591,7 @@ Genera al menos 3 videos de YouTube y 2 articulos. Responde SOLO con el JSON.
                     url=url,
                     razon_recomendacion=item.get("razon", "")[:500]
                 )
-                
+
                 lista_front.append({
                     "id": rec_bd.id,
                     "titulo": rec_bd.titulo,
@@ -601,7 +601,7 @@ Genera al menos 3 videos de YouTube y 2 articulos. Responde SOLO con el JSON.
                     "url": rec_bd.url,
                     "razon": rec_bd.razon_recomendacion
                 })
-            
+
             return lista_front
 
         except Exception as e:
@@ -614,7 +614,7 @@ Genera al menos 3 videos de YouTube y 2 articulos. Responde SOLO con el JSON.
 # ====================================================================
 # ENDPOINT 1: GENERAR EVALUACIÓN ADAPTATIVA
 # ====================================================================
-
+from django.views.decorators.csrf import csrf_exempt
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def generar_evaluacion_adaptativa(request):
@@ -664,12 +664,12 @@ def generar_evaluacion_adaptativa(request):
         print(">>> Obteniendo contexto D2R...")
         contexto_d2r = obtener_contexto_d2r(user)
         print(f">>> Contexto D2R: {contexto_d2r}")
-        
+
         # Pasar contexto a la IA para personalización
         print(">>> A PUNTO DE LLAMAR A GENERAR_PREGUNTAS_IA <<<")
         preguntas_json, mensaje_ia = generar_preguntas_ia(
-            recurso, 
-            dificultad, 
+            recurso,
+            dificultad,
             num_preguntas,
             contexto_atencion={"nivel": nivel_atencion, "promedio": promedio_atencion},
             contexto_d2r=contexto_d2r
@@ -724,7 +724,7 @@ def generar_evaluacion_adaptativa(request):
 # ====================================================================
 # ENDPOINT 2: ENVIAR RESPUESTAS
 # ====================================================================
-
+from django.views.decorators.csrf import csrf_exempt
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def enviar_respuestas_evaluacion(request):
