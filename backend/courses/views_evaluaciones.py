@@ -244,13 +244,9 @@ def generar_preguntas_fallback(recurso, dificultad, num_preguntas):
 
 
 def generar_preguntas_ia(recurso, dificultad, num_preguntas, contexto_atencion=None, contexto_d2r=None):
-    """
-    Genera preguntas usando Gemini (modelo disponible en tu cuenta).
-    Reintenta 2 veces antes de fallback.
-    Ahora incluye contexto del estudiante para personalización.
-    """
+    print(f"[GEMINI] generar_preguntas_ia CALLED. Disponible: {GEMINI_DISPONIBLE}")
     if not GEMINI_DISPONIBLE or not client:
-        print("[INFO] Gemini no disponible, usando fallback")
+        print("[GEMINI] No disponible en este entorno, usando fallback")
         return generar_preguntas_fallback(recurso, dificultad, num_preguntas)
 
     # Preparar contexto del estudiante para el prompt

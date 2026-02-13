@@ -10,12 +10,11 @@ urlpatterns = [
     # Rutas de autenticación (login, me)
     path('api/', include('users.urls')),
 
-    # Rutas de courses (generar-evaluacion, enviar-respuestas, etc.)
-    path('api/courses/', include('courses.urls')),
+    # ✅ CORRECCIÓN: Rutas de courses (generar-evaluacion, recomendaciones, etc.)
+    # Ahora responden a /api/generar-evaluacion/ directamente (sin /courses/)
+    path('api/', include('courses.urls')),
 
-    # Rutas de evaluaciones
+    # Rutas de evaluaciones y analytics adicionales
     path('api/evaluaciones/', include('evaluaciones.urls')),
-
-    # Rutas de analytics
     path('api/analytics/', include('analytics.urls')),
 ]

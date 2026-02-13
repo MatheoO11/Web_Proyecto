@@ -31,7 +31,7 @@ export default function EvaluacionAdaptativa({ recursoId = null, onClose }) {
     setError(null);
 
     try {
-      const res = await fetch(`${API_URL}/api/courses/generar-evaluacion/`, {
+      const res = await fetch(`${API_URL}/api/generar-evaluacion/`, {
         method: 'POST',
         headers: {
           Authorization: `Token ${token}`,
@@ -282,8 +282,8 @@ export default function EvaluacionAdaptativa({ recursoId = null, onClose }) {
                         key={opIndex}
                         onClick={() => handleRespuesta(index, letra)}
                         className={`w-full text-left p-3 rounded-lg transition border-2 ${isSelected
-                            ? 'bg-blue-100 border-blue-500 text-blue-900'
-                            : 'bg-white border-gray-200 hover:border-gray-300 text-gray-700'
+                          ? 'bg-blue-100 border-blue-500 text-blue-900'
+                          : 'bg-white border-gray-200 hover:border-gray-300 text-gray-700'
                           }`}
                       >
                         <span className="font-bold mr-2">{letra}.</span>
@@ -310,8 +310,8 @@ export default function EvaluacionAdaptativa({ recursoId = null, onClose }) {
                 onClick={enviarRespuestas}
                 disabled={enviando || Object.keys(respuestas).length < preguntas.length}
                 className={`flex-1 py-3 rounded-lg font-bold transition ${enviando || Object.keys(respuestas).length < preguntas.length
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : 'bg-green-600 hover:bg-green-700 text-white'
+                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  : 'bg-green-600 hover:bg-green-700 text-white'
                   }`}
               >
                 {enviando ? 'Enviando...' : 'Enviar Respuestas'}
