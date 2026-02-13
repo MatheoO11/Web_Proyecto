@@ -700,10 +700,14 @@ def generar_evaluacion_adaptativa(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def enviar_respuestas_evaluacion(request):
+    print("=" * 60)
+    print(">>> ENDPOINT enviar_respuestas_evaluacion LLAMADO <<<")
+    print("=" * 60)
     user = request.user
     evaluacion_id = request.data.get("evaluacion_id")
     respuestas = request.data.get("respuestas", [])
     tiempo_invertido = request.data.get("tiempo_invertido", 0)
+    print(f">>> Usuario: {user}, evaluacion_id: {evaluacion_id}, respuestas: {len(respuestas)}")
 
     try:
         if not evaluacion_id:
@@ -742,7 +746,15 @@ def enviar_respuestas_evaluacion(request):
 
         recursos_rec = []
         if not aprobado:
-            recursos_rec = generar_recursos_recomendados_ia(user, evaluacion.recurso, nivel_atencion, porcentaje)
+            try:
+                recursos_rec = generar_recursos_recomendados_ia(user, evaluacion.recurso, nivel_atencion, porcentaje)
+            except Exception as rec_err:
+                print(f"[WARNING] Error generando recursos recomendados (no crítico): {rec_err}")
+                try:
+                    recursos_rec = generar_recursos_recomendados_fallback(user, evaluacion.recurso, nivel_atencion)
+                except Exception as fb_err:
+                    print(f"[WARNING] Fallback de recomendaciones también falló: {fb_err}")
+                    recursos_rec = []
 
         return Response({
             "success": True,
