@@ -522,7 +522,7 @@ Genera al menos 3 videos de YouTube y 2 articulos. Responde SOLO con el JSON.
     for intento in range(1, 3):
         try:
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-2.0-flash",
                 contents=prompt
             )
 

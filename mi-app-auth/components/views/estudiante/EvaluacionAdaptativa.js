@@ -84,7 +84,7 @@ export default function EvaluacionAdaptativa({ recursoId = null, onClose }) {
     const respuestasArray = preguntas.map((_, index) => respuestas[index]);
 
     try {
-      const res = await fetch(`${API_URL}/api/courses/enviar-respuestas/`, {
+      const res = await fetch(`${API_URL}/api/enviar-respuestas/`, {
         method: 'POST',
         headers: {
           Authorization: `Token ${token}`,
